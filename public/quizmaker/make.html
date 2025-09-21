@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <script src="/config.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <script src="/app.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>퀴즈 만들기</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="header"><h1>새 퀴즈 만들기</h1></header>
+
+    <main style="padding: 1.25rem">
+      <section class="card">
+        <label for="quizName">퀴즈 이름</label>
+        <input
+          id="quizName"
+          class="input-text"
+          type="text"
+          placeholder="퀴즈 제목을 입력하세요"
+        />
+
+        <label for="quizImage" style="margin-top: 0.5rem"
+          >대표 이미지 (선택)</label
+        >
+        <input id="quizImage" type="file" accept="image/*" class="input-file" />
+        <img
+          id="imagePreview"
+          alt="이미지 미리보기"
+          style="
+            max-width: 220px;
+            display: none;
+            margin-top: 0.5rem;
+            border-radius: 8px;
+          "
+        />
+
+        <div style="margin-top: 1rem; display: flex; gap: 0.5rem">
+          <button id="createQuizBtn" type="button" class="btn-primary">
+            만들기
+          </button>
+          <button
+            id="cancelBtn"
+            class="small-btn secondary"
+            onclick="history.back()"
+          >
+            취소
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">© 2025 QuizMaker</footer>
+
+    <script>
+      // ⚡ db는 app.js에서 전역으로 선언됨 → 여기서는 재선언하지 않음
+      const bucket = window.__QUIZ_BUCKET__ || "quiz-assets";
+
+      const quizNameEl = document.getElementById("quizName");
+      const quizImageEl = document.getElementById("quizImage");
+      const previewEl = document.getElementById("imagePreview");
+      const createBtn = document.getElementById("createQuizBtn");
+
+      quizImageEl.addEventListener("change", (e) => {
+        const f = e.target.files[0];
+        if (!f) {
+          previewEl.style.display = "none";
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          previewEl.src = ev.target.result;
+          previewEl.style.display = "block";
+        };
+        reader.readAsDataURL(f);
+      });
+
+      async function uploadImage(file, path) {
+        try {
+          const { error } = await db.storage
+            .from(bucket)
+            .upload(path, file, { upsert: true });
+          if (error) throw error;
+
+          const { data: pub } = await db.storage
+            .from(bucket)
+            .getPublicUrl(path);
+          return pub.publicUrl;
+        } catch (err) {
+          console.error("uploadImage err", err);
+          return null;
+        }
+      }
+
+      createBtn.addEventListener("click", async () => {
+        const name = quizNameEl.value.trim();
+        if (!name) {
+          alert("퀴즈 이름을 입력하세요.");
+          return;
+        }
+        try {
+          let imageUrl = null;
+          if (quizImageEl.files && quizImageEl.files[0]) {
+            const ext = quizImageEl.files[0].name.split(".").pop();
+            const path = `quiz-thumbnails/${Date.now()}.${ext}`;
+            imageUrl = await uploadImage(quizImageEl.files[0], path);
+          }
+
+          const res = await fetch("/api/quizzes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name,
+              settings: { image: imageUrl },
+            }),
+          });
+          const result = await res.json();
+          if (!res.ok || result.error)
+            throw new Error(result.error || "퀴즈 생성 실패");
+
+          window.location.href = `/quizmaker/my/${result.quiz.slug}`;
+        } catch (err) {
+          console.error("create quiz err", err);
+          alert("퀴즈 생성에 실패했습니다: " + (err.message || err));
+        }
+      });
+    </script>
+  </body>
+</html>

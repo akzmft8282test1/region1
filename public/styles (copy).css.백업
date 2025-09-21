@@ -1,0 +1,139 @@
+/* public/styles.css
+   모던하고 접근성 고려한 스타일
+   - 그라데이션 배경, 카드, 버튼 스타일, 타이머 강조
+*/
+
+:root{
+  --bg1: #6a11cb;
+  --bg2: #2575fc;
+  --card-bg: rgba(255,255,255,0.08);
+  --glass: rgba(255,255,255,0.06);
+  --accent: linear-gradient(45deg,#ff6a00,#ee0979);
+  --muted: rgba(255,255,255,0.7);
+  --success: #28a745;
+  --danger: #dc3545;
+}
+
+/* 기본 레이아웃 */
+* { box-sizing: border-box; }
+html,body { height:100%; }
+body {
+  margin:0;
+  font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: linear-gradient(135deg,var(--bg1),var(--bg2));
+  color: #fff;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+}
+
+/* header/footer */
+.header {
+  background: rgba(0,0,0,0.22);
+  padding:1rem;
+  text-align:center;
+  font-size:1.25rem;
+  font-weight:600;
+}
+.footer {
+  text-align:center;
+  padding:0.75rem;
+  background: rgba(0,0,0,0.2);
+  font-size:0.9rem;
+}
+
+/* main layout */
+.main-container {
+  flex:1;
+  padding:2rem;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:1.25rem;
+}
+
+/* 카드 */
+.card {
+  background: var(--card-bg);
+  border-radius:14px;
+  padding:1.25rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.card:hover { transform: translateY(-6px); box-shadow:0 12px 40px rgba(0,0,0,0.24); }
+
+/* typography */
+h1,h2 { margin:0 0 .5rem 0; }
+p { margin:.4rem 0 1rem; color:var(--muted); }
+
+/* inputs */
+.input-text, input[type="text"], textarea {
+  width:100%;
+  padding:0.6rem 0.75rem;
+  border-radius:8px;
+  border:none;
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+  margin-top:0.5rem;
+}
+.input-file { margin-top:0.5rem; color:#fff; }
+
+/* buttons */
+.btn-primary {
+  background: var(--accent);
+  border:none;
+  padding:0.7rem 1.25rem;
+  border-radius:999px;
+  color:#fff;
+  font-weight:700;
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,0.24); }
+.small-btn {
+  background: linear-gradient(90deg,#00c6ff,#0072ff);
+  border:none;
+  color:#fff;
+  padding:0.35rem 0.6rem;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:0.9rem;
+}
+.small-btn.secondary { background: rgba(255,255,255,0.12); color: #fff; }
+.small-btn.host { background: linear-gradient(90deg,#4CAF50,#2E7D32); }
+
+/* quiz list */
+.quiz-list, .quiz-list li, .quiz-item { list-style:none; padding:0; margin:0; }
+.quiz-list li { margin-bottom:0.6rem; }
+
+/* layout helpers */
+.btn-box { display:flex; gap:0.5rem; align-items:center; }
+
+/* question UI */
+#questionBox { display:none; padding:1rem; border-radius:12px; background:rgba(255,255,255,0.06); }
+.answer-btn { display:block; width:100%; padding:0.8rem; margin:0.5rem 0; border-radius:10px; border:none; background: #fff; color:#222; cursor:pointer; font-weight:600; }
+
+/* timer */
+#timer { font-weight:800; font-size:1.25rem; color:#fff; margin-top:0.5rem; }
+.timer-danger { color: #ffdd57; }
+
+/* host player table */
+table { width:100%; border-collapse:collapse; }
+th,td { padding:0.6rem; text-align:left; }
+tbody tr:nth-child(even) { background: rgba(255,255,255,0.03); }
+
+/* leaderboard */
+#rankList li { list-style:none; margin:0.4rem 0; padding:0.6rem; border-radius:8px; background: rgba(255,255,255,0.06); display:flex; justify-content:space-between; }
+.top1 { background: linear-gradient(90deg,#FFD700,#FFEE8A); color:#000; font-weight:800; }
+.top2 { background: linear-gradient(90deg,#C0C0C0,#E8E8E8); color:#000; font-weight:700; }
+.top3 { background: linear-gradient(90deg,#CD7F32,#E8CDA3); color:#000; font-weight:700; }
+
+/* accessible focus */
+button:focus, input:focus, textarea:focus { outline: 3px solid rgba(255,255,255,0.12); outline-offset: 2px; }
+
+/* responsive small tweaks */
+@media (max-width:480px){
+  .main-container { padding:1rem; grid-template-columns:1fr; }
+  .btn-box { flex-wrap:wrap; }
+}

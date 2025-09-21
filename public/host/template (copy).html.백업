@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <script src="/config.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <script src="/app.js"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>퀴즈 호스트</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="header"><h1 id="quizTitle">퀴즈 호스트</h1></header>
+
+    <main class="main-container" style="grid-template-columns: 1fr">
+      <section class="card">
+        <div
+          style="
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            justify-content: center;
+          "
+        >
+          <button id="startBtn" class="btn-primary" aria-label="퀴즈 시작">
+            퀴즈 시작
+          </button>
+          <button
+            id="nextBtn"
+            class="btn-primary"
+            style="display: none"
+            aria-label="다음 문제"
+          >
+            다음 문제 ▶
+          </button>
+          <button
+            id="endGameBtn"
+            class="btn-primary"
+            style="background: linear-gradient(90deg, #ff5f6d, #ffc371)"
+            aria-label="게임 종료"
+          >
+            게임 종료
+          </button>
+        </div>
+
+        <div
+          id="statusText"
+          style="margin-top: 1rem; text-align: center; color: var(--muted)"
+        >
+          참가자를 기다리는 중...
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>참가자 목록</h2>
+        <table id="playerTable" aria-label="참가자 목록">
+          <thead>
+            <tr>
+              <th>닉네임</th>
+              <th>점수</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <h2 style="margin-top: 1rem">실시간 순위</h2>
+        <ul id="scoreboard"></ul>
+      </section>
+    </main>
+
+    <footer class="footer">© 2025 QuizMaker - Host</footer>
+
+    <script>
+      // Supabase init
+      const supabase = window.supabase.createClient(
+        window.__SUPABASE_URL__,
+        window.__SUPABASE_KEY__,
+      );
+
+      const slug = window.location.pathname.split("/").pop();
+      let gameId = null;
+
+      const startBtn = document.getElementById("startBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const endGameBtn = document.getElementById("endGameBtn");
+      const statusText = document.getElementById("statusText");
+      const playerTableBody = document.querySelector("#playerTable tbody");
+      const scoreboard = document.getElementById("scoreboard");
+
+      // 유틸
+      function renderPlayersTable(players) {
+        playerTableBody.innerHTML = "";
+        players.forEach((p) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${p.nickname}</td><td>${p.points}</td>`;
+          playerTableBody.appendChild(tr);
+        });
+      }
+      function renderScoreboard(players) {
+        scoreboard.innerHTML = "";
+        players.forEach((p, idx) => {
+          const li = document.createElement("li");
+          li.className =
+            idx === 0 ? "top1" : idx === 1 ? "top2" : idx === 2 ? "top3" : "";
+          li.innerHTML = `<span>${idx + 1}등 - ${p.nickname}</span> <span>${p.points}점</span>`;
+          scoreboard.appendChild(li);
+        });
+      }
+
+      async function ensureGame() {
+        try {
+          const { data: game } = await supabase
+            .from("games")
+            .select("id,quiz_id,started,current_question_ord,ended")
+            .eq("slug", slug)
+            .maybeSingle();
+          if (game) {
+            gameId = game.id;
+            statusText.textContent = game.started ? "진행중" : "대기중";
+            nextBtn.style.display = game.started ? "inline-block" : "none";
+            return;
+          }
+          // 게임 레코드가 없으면 생성
+          const { data: quiz } = await supabase
+            .from("quizzes")
+            .select("id,name")
+            .eq("slug", slug)
+            .maybeSingle();
+          if (!quiz) {
+            alert("해당 퀴즈가 없습니다.");
+            window.location.href = "/quizmaker";
+            return;
+          }
+          const { data: newGame, error } = await supabase
+            .from("games")
+            .insert([{ quiz_id: quiz.id, slug }])
+            .select()
+            .single();
+          if (error) throw error;
+          gameId = newGame.id;
+          document.getElementById("quizTitle").textContent =
+            quiz.name + " (호스트)";
+        } catch (err) {
+          console.error("ensureGame", err);
+          safeAlert("게임 확보에 실패했습니다: " + (err.message || err));
+        }
+      }
+
+      async function loadPlayers() {
+        if (!gameId) return;
+        const { data: players } = await supabase
+          .from("players")
+          .select("nickname,points")
+          .eq("game_id", gameId)
+          .order("points", { ascending: false });
+        if (!players) return;
+        renderPlayersTable(players);
+        renderScoreboard(players);
+      }
+
+      // Realtime 구독
+      function subscribePlayers() {
+        if (!gameId) return;
+        supabase
+          .channel("players-" + gameId)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "players",
+              filter: `game_id=eq.${gameId}`,
+            },
+            (payload) => {
+              loadPlayers();
+            },
+          )
+          .subscribe();
+      }
+      function subscribeGame() {
+        if (!gameId) return;
+        supabase
+          .channel("games-" + gameId)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "games",
+              filter: `id=eq.${gameId}`,
+            },
+            (payload) => {
+              const g = payload.new;
+              statusText.textContent = g.started
+                ? "진행중"
+                : g.ended
+                  ? "종료됨"
+                  : "대기중";
+              nextBtn.style.display = g.started ? "inline-block" : "none";
+              if (g.ended) {
+                // 모든 참가자 리더보드로 강제 이동 (optional)
+                window.location.href = `/quiz/${slug}/leaderboard`;
+              }
+            },
+          )
+          .subscribe();
+      }
+
+      // 버튼 이벤트
+      startBtn.addEventListener("click", async () => {
+        if (!gameId) return safeAlert("게임 정보가 없습니다.");
+        try {
+          // set started true, current_question_ord = 0 (첫 문제)
+          await supabase
+            .from("games")
+            .update({ started: true, current_question_ord: 0 })
+            .eq("id", gameId);
+          startBtn.style.display = "none";
+          nextBtn.style.display = "inline-block";
+        } catch (err) {
+          console.error(err);
+          safeAlert("시작 실패: " + (err.message || err));
+        }
+      });
+
+      nextBtn.addEventListener("click", async () => {
+        if (!gameId) return;
+        try {
+          const { data: game } = await supabase
+            .from("games")
+            .select("current_question_ord,quiz_id")
+            .eq("id", gameId)
+            .single();
+          const qres = await supabase
+            .from("questions")
+            .select("id,ord")
+            .eq("quiz_id", game.quiz_id)
+            .order("ord", { ascending: true });
+          const total = qres.data ? qres.data.length : 0;
+          const current = game.current_question_ord;
+          if (current + 1 < total) {
+            await supabase
+              .from("games")
+              .update({ current_question_ord: current + 1 })
+              .eq("id", gameId);
+          } else {
+            // 종료 처리
+            await supabase
+              .from("games")
+              .update({ ended: true })
+              .eq("id", gameId);
+          }
+        } catch (err) {
+          console.error(err);
+          safeAlert("다음 문제 진행 실패: " + (err.message || err));
+        }
+      });
+
+      endGameBtn.addEventListener("click", async () => {
+        if (!confirm("게임을 종료하시겠습니까?")) return;
+        try {
+          await supabase.from("games").update({ ended: true }).eq("id", gameId);
+          window.location.href = `/quiz/${slug}/leaderboard`;
+        } catch (err) {
+          console.error(err);
+          safeAlert("종료 실패: " + (err.message || err));
+        }
+      });
+
+      // 안전 alert helper
+      function safeAlert(msg) {
+        try {
+          alert(msg);
+        } catch (e) {
+          console.log(msg);
+        }
+      }
+
+      (async () => {
+        await ensureGame();
+        await loadPlayers();
+        subscribePlayers();
+        subscribeGame();
+      })();
+    </script>
+  </body>
+</html>

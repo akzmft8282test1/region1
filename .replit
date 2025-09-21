@@ -1,0 +1,22 @@
+entrypoint = "server/index.js"
+modules = ["nodejs-22", "python-3.11"]
+hidden = [".config", "package-lock.json"]
+
+[gitHubImport]
+requiredFiles = [".replit", "replit.nix", "package.json", "package-lock.json"]
+
+[nix]
+channel = "stable-24_11"
+packages = ["lsof", "nano", "iproute2"]
+
+[deployment]
+run = "node server/index.js"
+deploymentTarget = "autoscale"
+ignorePorts = false
+
+[agent]
+expertMode = false
+
+[[ports]]
+localPort = 1030
+externalPort = 80

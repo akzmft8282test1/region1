@@ -1,0 +1,233 @@
+/**
+ * server/index.js
+ *
+ * 개선판:
+ * - friendly routes 추가 (/quiz/:slug -> public/quiz/template.html 등)
+ * - API 응답 JSON 일관성 유지
+ * - CORS 출처 제어 (환경변수 ALLOWED_ORIGINS)
+ * - Supabase client는 anon 키만 사용 (.env)
+ * - /config.js 제공 → 클라이언트에서 window.__SUPABASE_URL__ 읽을 수 있음
+ */
+
+require("dotenv").config();
+const express = require("express");
+const http = require("http");
+const path = require("path");
+const cors = require("cors");
+const { createClient } = require("@supabase/supabase-js");
+const { v4: uuidv4 } = require("uuid");
+console.log("DEBUG .env:", {
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_KEY: process.env.SUPABASE_KEY ? "(set)" : "(missing)",
+  PORT: process.env.PORT,
+});
+
+const app = express();
+const server = http.createServer(app);
+
+const PORT = process.env.PORT ? Number(process.env.PORT) : 1030;
+
+// Supabase 초기화 — 반드시 anon(public) 키 사용
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_KEY = process.env.SUPABASE_KEY || "";
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.error("❌ SUPABASE_URL or SUPABASE_KEY not set in .env");
+  process.exit(1);
+}
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// CORS 설정
+let corsOptions = {};
+if (process.env.ALLOWED_ORIGINS) {
+  const origins = process.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim());
+  corsOptions = {
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (origins.includes(origin)) callback(null, true);
+      else callback(new Error("Not allowed by CORS"));
+    },
+  };
+} else {
+  corsOptions = { origin: true }; // 개발 중 허용
+}
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// 정적 파일
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+// ✅ 클라이언트에 Supabase 값 제공
+app.get("/config.js", (req, res) => {
+  res.type("application/javascript");
+  res.send(`
+    window.__SUPABASE_URL__ = "${SUPABASE_URL}";
+    window.__SUPABASE_KEY__ = "${SUPABASE_KEY}";
+    window.__QUIZ_BUCKET__ = "${process.env.QUIZ_BUCKET || "quiz-assets"}";
+  `);
+});
+
+/* ------------------------------
+   Utility
+------------------------------ */
+function slugify(name) {
+  return name
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-");
+}
+function sendFileResponse(res, relPath) {
+  return res.sendFile(path.join(__dirname, "..", "public", relPath));
+}
+
+/* ------------------------------
+   Friendly routes
+------------------------------ */
+app.get("/", (req, res) => sendFileResponse(res, "quizmaker.html"));
+app.get("/quizmaker", (req, res) => sendFileResponse(res, "quizmaker.html"));
+app.get("/quizmaker/make", (req, res) =>
+  sendFileResponse(res, "quizmaker/make.html"),
+);
+app.get("/quizmaker/my/:slug", (req, res) =>
+  sendFileResponse(res, "quizmaker/my/template.html"),
+);
+app.get("/host/:slug", (req, res) =>
+  sendFileResponse(res, "host/template.html"),
+);
+app.get("/quiz/:slug/leaderboard", (req, res) =>
+  sendFileResponse(res, "quiz/leaderboard.html"),
+);
+app.get("/quiz/:slug", (req, res) =>
+  sendFileResponse(res, "quiz/template.html"),
+);
+
+/* ------------------------------
+   API: 퀴즈 생성 / 조회 / 문제 추가 / 게임 생성 / 참가
+------------------------------ */
+
+// 퀴즈 생성
+app.post("/api/quizzes", async (req, res) => {
+  try {
+    const { name, settings } = req.body;
+    if (!name) return res.status(400).json({ error: "name required" });
+
+    const baseSlug = slugify(name);
+    const slug = `${baseSlug}-${uuidv4().slice(0, 6)}`;
+
+    const { data, error } = await supabase
+      .from("quizzes")
+      .insert([{ name, slug, settings: settings || {} }])
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, quiz: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+// 퀴즈 조회
+app.get("/api/quizzes/:slug", async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { data: quiz, error } = await supabase
+      .from("quizzes")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (error) throw error;
+    if (!quiz) return res.status(404).json({ error: "quiz not found" });
+
+    const { data: questions } = await supabase
+      .from("questions")
+      .select("*, answers(*)")
+      .eq("quiz_id", quiz.id)
+      .order("ord");
+    quiz.questions = questions || [];
+
+    res.json({ success: true, quiz });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+// 문제 추가
+app.post("/api/quizzes/:slug/questions", async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { text, image_url, timeout, double_points, answers } = req.body;
+
+    const { data: quiz } = await supabase
+      .from("quizzes")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (!quiz) return res.status(404).json({ error: "quiz not found" });
+
+    const { count } = await supabase
+      .from("questions")
+      .select("id", { count: "exact", head: true })
+      .eq("quiz_id", quiz.id);
+    const ord = count || 0;
+
+    const { data: question, error: qerr } = await supabase
+      .from("questions")
+      .insert([
+        {
+          quiz_id: quiz.id,
+          ord,
+          text: text || "",
+          image_url: image_url || null,
+          timeout: timeout || 30,
+          double_points: !!double_points,
+        },
+      ])
+      .select("*")
+      .single();
+    if (qerr) throw qerr;
+
+    if (Array.isArray(answers)) {
+      const inserts = answers.map((a, idx) => ({
+        question_id: question.id,
+        ord: idx,
+        text: a.text || "",
+        image_url: a.image_url || null,
+        is_correct: !!a.is_correct,
+      }));
+      await supabase.from("answers").insert(inserts);
+    }
+
+    res.json({ success: true, question });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+/* ------------------------------
+   Healthcheck
+------------------------------ */
+app.get("/api/ping", (req, res) =>
+  res.json({ pong: true, time: new Date().toISOString() }),
+);
+
+/* ------------------------------
+   404 처리
+------------------------------ */
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "API not found" });
+  }
+  if (req.path.endsWith(".js") || req.path.endsWith(".css")) {
+    return res.status(404).send("File not found");
+  }
+  return sendFileResponse(res, "quizmaker.html");
+});
+
+server.listen(PORT, () => {
+  console.log(`✅ QuizMaker server running on http://localhost:${PORT}`);
+});
