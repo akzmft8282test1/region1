@@ -5,6 +5,8 @@
     <script src="/config.js"></script>
     <!-- ✅ Supabase SDK -->
     <script src="https://unpkg.com/@supabase/supabase-js"></script>
+    <!-- ✅ 공용 JS (Supabase client 초기화 포함) -->
+    <script src="/app.js"></script>
 
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -33,13 +35,11 @@
 
     <footer class="footer">© 2025 QuizMaker</footer>
 
-    <!-- ✅ 공용 JS는 body 끝에서 로드 -->
-    <script src="/app.js"></script>
     <script>
       document.getElementById("newQuizBtn").addEventListener("click", () => {
         window.location.href = "/quizmaker/make";
       });
-      // app.js 가 quiz 목록 자동 로딩
+      // ✅ quiz 목록은 app.js에서 자동으로 불러옴
     </script>
   </body>
 </html>

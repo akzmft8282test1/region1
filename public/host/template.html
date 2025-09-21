@@ -107,7 +107,7 @@
 
       async function ensureGame() {
         try {
-          const { data: game } = await supabase
+          const { data: game } = await db
             .from("games")
             .select("id,quiz_id,started,current_question_ord,ended")
             .eq("slug", slug)
@@ -119,7 +119,7 @@
             return;
           }
           // 게임 레코드가 없으면 생성
-          const { data: quiz } = await supabase
+          const { data: quiz } = await db
             .from("quizzes")
             .select("id,name")
             .eq("slug", slug)
@@ -129,7 +129,7 @@
             window.location.href = "/quizmaker";
             return;
           }
-          const { data: newGame, error } = await supabase
+          const { data: newGame, error } = await db
             .from("games")
             .insert([{ quiz_id: quiz.id, slug }])
             .select()
@@ -146,7 +146,7 @@
 
       async function loadPlayers() {
         if (!gameId) return;
-        const { data: players } = await supabase
+        const { data: players } = await db
           .from("players")
           .select("nickname,points")
           .eq("game_id", gameId)
@@ -224,7 +224,7 @@
       nextBtn.addEventListener("click", async () => {
         if (!gameId) return;
         try {
-          const { data: game } = await supabase
+          const { data: game } = await db
             .from("games")
             .select("current_question_ord,quiz_id")
             .eq("id", gameId)
@@ -257,7 +257,7 @@
       endGameBtn.addEventListener("click", async () => {
         if (!confirm("게임을 종료하시겠습니까?")) return;
         try {
-          await supabase.from("games").update({ ended: true }).eq("id", gameId);
+          await db.from("games").update({ ended: true }).eq("id", gameId);
           window.location.href = `/quiz/${slug}/leaderboard`;
         } catch (err) {
           console.error(err);

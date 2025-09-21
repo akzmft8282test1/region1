@@ -19,10 +19,6 @@
     <footer class="footer">© 2025 QuizMaker</footer>
 
     <script>
-      
-
-
-      // URL format: /quiz/:slug/leaderboard
       const parts = window.location.pathname.split("/");
       const slug = parts.length >= 3 ? parts[2] : null;
 
@@ -34,7 +30,7 @@
           return;
         }
         try {
-          const { data: quiz } = await supabase
+          const { data: quiz } = await db
             .from("quizzes")
             .select("id,name")
             .eq("slug", slug)
@@ -46,8 +42,7 @@
           document.getElementById("quizTitle").textContent =
             `${quiz.name} - 최종 순위`;
 
-          // 최근 생성된 game 찾기 (가장 최신)
-          const { data: games } = await supabase
+          const { data: games } = await db
             .from("games")
             .select("id")
             .eq("quiz_id", quiz.id)
@@ -59,7 +54,7 @@
           }
           const gameId = games[0].id;
 
-          const { data: players } = await supabase
+          const { data: players } = await db
             .from("players")
             .select("nickname,points")
             .eq("game_id", gameId)

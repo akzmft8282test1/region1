@@ -36,7 +36,7 @@
 
     <footer class="footer">© 2025 QuizMaker</footer>
 
-    <!-- Modal (hidden) -->
+    <!-- Modal -->
     <div
       id="questionModal"
       style="
@@ -106,9 +106,6 @@
     </div>
 
     <script>
-      
-
-
       const slug = window.location.pathname.split("/").pop();
       const quizTitleEl = document.getElementById("quizTitle");
       const addBtn = document.getElementById("addQuestionBtn");
@@ -116,7 +113,6 @@
       const shareBtn = document.getElementById("shareBtn");
       const hostBtn = document.getElementById("hostBtn");
 
-      // modal
       const modal = document.getElementById("questionModal");
       const modalTitle = document.getElementById("modalTitle");
       const qText = document.getElementById("questionText");
@@ -172,10 +168,9 @@
         }
       }
 
-      // load quiz meta & questions
       async function loadQuizAndQuestions() {
         try {
-          const { data: quiz, error } = await supabase
+          const { data: quiz, error } = await db
             .from("quizzes")
             .select("*")
             .eq("slug", slug)
@@ -187,8 +182,8 @@
             return;
           }
           quizTitleEl.textContent = `퀴즈 관리 — ${quiz.name}`;
-          // load questions
-          const { data: questions } = await supabase
+
+          const { data: questions } = await db
             .from("questions")
             .select("*")
             .eq("quiz_id", quiz.id)
@@ -237,7 +232,6 @@
         }
       }
 
-      // modal save (create or update)
       saveBtn.addEventListener("click", async () => {
         const text = qText.value.trim();
         const timeout = parseInt(timeoutEl.value, 10) || 30;
@@ -248,42 +242,34 @@
         }
 
         try {
-          // fetch quiz id
-          const { data: quiz } = await supabase
+          const { data: quiz } = await db
             .from("quizzes")
             .select("id")
             .eq("slug", slug)
             .single();
           if (!quiz) throw new Error("quiz not found");
 
-          // insert or update question
           let questionId = editingQuestionId;
           if (!questionId) {
-            // compute ord
-            const { count } = await supabase
+            const { count } = await db
               .from("questions")
               .select("id", { head: true, count: "exact" })
               .eq("quiz_id", quiz.id);
             const ord = count || 0;
-            const { data: q } = await supabase
+            const { data: q } = await db
               .from("questions")
               .insert([{ quiz_id: quiz.id, ord, text, timeout, double_points }])
               .select()
               .single();
             questionId = q.id;
           } else {
-            await supabase
+            await db
               .from("questions")
               .update({ text, timeout, double_points })
               .eq("id", questionId);
-            // delete old answers
-            await supabase
-              .from("answers")
-              .delete()
-              .eq("question_id", questionId);
+            await db.from("answers").delete().eq("question_id", questionId);
           }
 
-          // answers
           const ansInserts = [];
           Array.from(answersContainer.children).forEach((div, idx) => {
             const atext =
@@ -299,8 +285,7 @@
               is_correct: isCorrect,
             });
           });
-          if (ansInserts.length)
-            await supabase.from("answers").insert(ansInserts);
+          if (ansInserts.length) await db.from("answers").insert(ansInserts);
 
           alert("저장되었습니다 ✅");
           closeModal();
@@ -311,15 +296,14 @@
         }
       });
 
-      // edit question (load answers & fields)
       async function editQuestion(qid) {
         try {
-          const { data: q } = await supabase
+          const { data: q } = await db
             .from("questions")
             .select("*")
             .eq("id", qid)
             .single();
-          const { data: answers } = await supabase
+          const { data: answers } = await db
             .from("answers")
             .select("*")
             .eq("question_id", qid)
@@ -339,8 +323,8 @@
       async function deleteQuestion(qid) {
         if (!confirm("문제를 삭제하시겠습니까?")) return;
         try {
-          await supabase.from("questions").delete().eq("id", qid);
-          await supabase.from("answers").delete().eq("question_id", qid);
+          await db.from("questions").delete().eq("id", qid);
+          await db.from("answers").delete().eq("question_id", qid);
           loadQuizAndQuestions();
         } catch (err) {
           console.error(err);
@@ -350,17 +334,17 @@
 
       async function duplicateQuestion(qid) {
         try {
-          const { data: q } = await supabase
+          const { data: q } = await db
             .from("questions")
             .select("*")
             .eq("id", qid)
             .single();
-          const { data: answers } = await supabase
+          const { data: answers } = await db
             .from("answers")
             .select("*")
             .eq("question_id", qid)
             .order("ord");
-          const { data: newQ } = await supabase
+          const { data: newQ } = await db
             .from("questions")
             .insert([
               {
@@ -379,7 +363,7 @@
               text: a.text,
               is_correct: a.is_correct,
             }));
-            await supabase.from("answers").insert(clones);
+            await db.from("answers").insert(clones);
           }
           loadQuizAndQuestions();
         } catch (err) {
@@ -388,7 +372,6 @@
         }
       }
 
-      // drag & drop: update ord in DB
       function enableDragAndDrop() {
         const list = questionListEl;
         let dragItem = null;
@@ -419,13 +402,12 @@
           const items = [...list.children];
           for (let i = 0; i < items.length; i++) {
             const id = items[i].dataset.id;
-            await supabase.from("questions").update({ ord: i }).eq("id", id);
+            await db.from("questions").update({ ord: i }).eq("id", id);
           }
           loadQuizAndQuestions();
         });
       }
 
-      // share & host buttons
       shareBtn.addEventListener("click", async () => {
         const url = `${window.location.origin}/quiz/${slug}`;
         try {
@@ -439,7 +421,6 @@
         window.location.href = `/host/${slug}`;
       });
 
-      // initial load
       loadQuizAndQuestions();
     </script>
   </body>

@@ -55,7 +55,7 @@
     <footer class="footer">© 2025 QuizMaker</footer>
 
     <script>
-      // ⚡ db는 app.js에서 전역으로 선언됨 → 여기서는 재선언하지 않음
+      // ⚡ db는 app.js에서 이미 전역 생성됨 → 여기서 재선언 X
       const bucket = window.__QUIZ_BUCKET__ || "quiz-assets";
 
       const quizNameEl = document.getElementById("quizName");
