@@ -8,6 +8,65 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>퀴즈 관리</title>
     <link rel="stylesheet" href="/styles.css" />
+    <style>
+      /* 모달 배경 */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(6px);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      /* 모달 카드 */
+      .modal-content {
+        background: #1e1e2f;
+        color: #f1f1f1;
+        padding: 1.5rem;
+        width: 90%;
+        max-width: 640px;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        z-index: 1001;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      /* 입력창 통일 */
+      .modal-content textarea,
+      .modal-content input[type="text"],
+      .modal-content input[type="number"] {
+        width: 100%;
+        margin-top: 0.3rem;
+        margin-bottom: 0.8rem;
+        padding: 0.5rem;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+      }
+
+      /* 답변 입력 줄 */
+      #answersContainer > div {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+      #answersContainer input[type="text"] {
+        flex: 1;
+      }
+
+      /* 액션 버튼 영역 */
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+    </style>
   </head>
   <body>
     <header class="header"><h1 id="quizTitle">퀴즈 관리</h1></header>
@@ -37,36 +96,15 @@
     <footer class="footer">© 2025 QuizMaker</footer>
 
     <!-- Modal -->
-    <div
-      id="questionModal"
-      style="
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-      "
-    >
-      <div
-        class="modal-content"
-        style="
-          background: #fff;
-          color: #111;
-          padding: 1rem;
-          width: 90%;
-          max-width: 640px;
-          border-radius: 12px;
-          z-index: 1001;
-        "
-      >
+    <div id="questionModal" class="modal-overlay">
+      <div class="modal-content">
         <h3 id="modalTitle">문제 만들기</h3>
+
         <label for="questionText">문제 텍스트</label>
         <textarea
           id="questionText"
           class="input-text"
-          style="height: 80px; width: 100%"
+          style="height: 80px"
         ></textarea>
 
         <label for="questionImage">문제 이미지</label>
@@ -75,7 +113,6 @@
           type="file"
           accept="image/*"
           class="input-file"
-          style="width: 100%"
         />
         <div id="questionImagePreview" style="margin-top: 0.5rem"></div>
 
@@ -86,24 +123,16 @@
           type="number"
           min="5"
           value="30"
-          style="width: 100%"
         />
 
-        <div style="display: flex; gap: 1rem; margin-top: 0.5rem">
+        <div style="margin-top: 0.5rem">
           <label><input id="doublePoints" type="checkbox" /> 점수 두배</label>
         </div>
 
         <h4 style="margin-top: 0.75rem">답변 (4개)</h4>
         <div id="answersContainer"></div>
 
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
-          "
-        >
+        <div class="modal-actions">
           <button id="saveQuestionBtn" class="btn-primary">저장</button>
           <button id="cancelModalBtn" class="small-btn secondary">취소</button>
         </div>
