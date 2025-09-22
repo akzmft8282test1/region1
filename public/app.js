@@ -1,3 +1,7 @@
+수정된 app.js,make.html, my/template.html, quiz/template.html, host/template.html 전체코드를 한 파일씩 나누어서 수정된 전체코드 제공
+
+app.js
+
 /* public/app.js
    공용 프론트엔드 로직 (퀴즈 목록 불러오기, 공유, 이동)
    - 모든 HTML에서 공통으로 사용됩니다.
@@ -45,6 +49,21 @@ function buildHostUrl(slug) {
   return `${window.location.origin}/host/${slug}`;
 }
 
+async function uploadImage(file, path, bucket = "quiz-assets") {
+  try {
+    const { error } = await db.storage
+      .from(bucket)
+      .upload(path, file, { upsert: true });
+    if (error) throw error;
+
+    const { data: pub } = await db.storage.from(bucket).getPublicUrl(path);
+    return pub.publicUrl;
+  } catch (err) {
+    console.error("uploadImage err", err);
+    return null;
+  }
+}
+
 /* ------------------------
    퀴즈 목록 불러오기 (내 퀴즈)
    - 호출: quizmaker.html 에서 DOMContentLoaded 시
@@ -82,6 +101,17 @@ async function loadMyQuizzes() {
 
         const title = document.createElement("span");
         title.textContent = quiz.name;
+
+        if (quiz.settings?.image) {
+          const img = document.createElement("img");
+          img.src = quiz.settings.image;
+          img.alt = `${quiz.name} 대표 이미지`;
+          img.style.maxWidth = "40px";
+          img.style.maxHeight = "40px";
+          img.style.borderRadius = "6px";
+          img.style.marginRight = "0.5rem";
+          li.insertBefore(img, title);
+        }
 
         // 버튼 그룹
         const btnBox = document.createElement("div");

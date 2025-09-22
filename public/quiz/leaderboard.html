@@ -6,14 +6,58 @@
     <script src="/app.js"></script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>최종 리더보드</title>
+    <title>최종 순위</title>
     <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .leaderboard {
+        max-width: 600px;
+        margin: 2rem auto;
+        padding: 1rem;
+        border-radius: 12px;
+        background: #1e1e2f;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      }
+      .leaderboard h2 {
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+      .leaderboard li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.6rem 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 1.1rem;
+      }
+      .leaderboard li.top1 {
+        background: linear-gradient(90deg, #ffd700, #ffec8b);
+        color: #000;
+        font-weight: bold;
+      }
+      .leaderboard li.top2 {
+        background: linear-gradient(90deg, #c0c0c0, #e0e0e0);
+        color: #000;
+        font-weight: bold;
+      }
+      .leaderboard li.top3 {
+        background: linear-gradient(90deg, #cd7f32, #e6b98b);
+        color: #000;
+        font-weight: bold;
+      }
+    </style>
   </head>
   <body>
-    <header class="header"><h1 id="quizTitle">최종 리더보드</h1></header>
+    <header class="header"><h1 id="quizTitle">최종 순위</h1></header>
 
-    <main style="padding: 1.25rem">
-      <ul id="rankList"></ul>
+    <main>
+      <section class="leaderboard">
+        <h2>🏆 결과 발표 🏆</h2>
+        <ul id="rankList">
+          <li>불러오는 중...</li>
+        </ul>
+      </section>
     </main>
 
     <footer class="footer">© 2025 QuizMaker</footer>
@@ -21,55 +65,59 @@
     <script>
       const parts = window.location.pathname.split("/");
       const slug = parts.length >= 3 ? parts[2] : null;
-
       const rankList = document.getElementById("rankList");
 
       async function loadLeaderboard() {
         if (!slug) {
-          rankList.innerHTML = "<li>잘못된 경로</li>";
+          rankList.innerHTML = "<li>잘못된 경로입니다.</li>";
           return;
         }
         try {
+          // 🔹 퀴즈 정보 가져오기
           const { data: quiz } = await db
             .from("quizzes")
             .select("id,name")
             .eq("slug", slug)
             .maybeSingle();
           if (!quiz) {
-            rankList.innerHTML = "<li>퀴즈를 찾을 수 없습니다</li>";
+            rankList.innerHTML = "<li>퀴즈를 찾을 수 없습니다.</li>";
             return;
           }
           document.getElementById("quizTitle").textContent =
-            `${quiz.name} - 최종 순위`;
+            `${quiz.name} — 최종 순위`;
 
+          // 🔹 가장 최근 게임 세션 가져오기
           const { data: games } = await db
             .from("games")
-            .select("id")
+            .select("id,created_at")
             .eq("quiz_id", quiz.id)
             .order("created_at", { ascending: false })
             .limit(1);
           if (!games || games.length === 0) {
-            rankList.innerHTML = "<li>게임 세션이 없습니다</li>";
+            rankList.innerHTML = "<li>게임 세션이 없습니다.</li>";
             return;
           }
           const gameId = games[0].id;
 
+          // 🔹 참가자 불러오기
           const { data: players } = await db
             .from("players")
             .select("nickname,points")
             .eq("game_id", gameId)
             .order("points", { ascending: false });
-          if (!players) {
-            rankList.innerHTML = "<li>참가자가 없습니다</li>";
+          if (!players || players.length === 0) {
+            rankList.innerHTML = "<li>참가자가 없습니다.</li>";
             return;
           }
 
+          // 🔹 UI 출력
           rankList.innerHTML = "";
           players.forEach((p, idx) => {
             const li = document.createElement("li");
-            li.className =
-              idx === 0 ? "top1" : idx === 1 ? "top2" : idx === 2 ? "top3" : "";
-            li.innerHTML = `<span>${idx + 1}등 - ${p.nickname}</span><span>${p.points}점</span>`;
+            if (idx === 0) li.className = "top1";
+            else if (idx === 1) li.className = "top2";
+            else if (idx === 2) li.className = "top3";
+            li.innerHTML = `<span>${idx + 1}등 — ${p.nickname}</span><span>${p.points}점</span>`;
             rankList.appendChild(li);
           });
         } catch (err) {
