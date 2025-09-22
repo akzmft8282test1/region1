@@ -9,62 +9,65 @@
     <title>퀴즈 관리</title>
     <link rel="stylesheet" href="/styles.css" />
     <style>
-      /* 모달 배경 */
-      .modal-overlay {
+      /* 모달 스타일 */
+      #questionModal {
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.55);
-        backdrop-filter: blur(6px);
+        background: rgba(0, 0, 0, 0.6);
         align-items: center;
         justify-content: center;
         z-index: 1000;
       }
-
-      /* 모달 카드 */
-      .modal-content {
+      #questionModal .modal-content {
         background: #1e1e2f;
-        color: #f1f1f1;
+        color: #f0f0f0;
         padding: 1.5rem;
         width: 90%;
         max-width: 640px;
         border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-        z-index: 1001;
-        max-height: 90vh;
-        overflow-y: auto;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        animation: fadeIn 0.25s ease-in-out;
       }
-
-      /* 입력창 통일 */
-      .modal-content textarea,
-      .modal-content input[type="text"],
-      .modal-content input[type="number"] {
+      #questionModal label {
+        display: block;
+        margin-top: 0.75rem;
+        margin-bottom: 0.25rem;
+        font-weight: 600;
+      }
+      #questionModal textarea,
+      #questionModal input[type="text"],
+      #questionModal input[type="number"] {
         width: 100%;
-        margin-top: 0.3rem;
-        margin-bottom: 0.8rem;
         padding: 0.5rem;
         border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid #444;
+        background: #2b2b3d;
         color: #fff;
       }
-
-      /* 답변 입력 줄 */
-      #answersContainer > div {
+      #answersContainer div {
         display: flex;
         gap: 0.5rem;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.4rem;
       }
       #answersContainer input[type="text"] {
         flex: 1;
       }
-
-      /* 액션 버튼 영역 */
-      .modal-actions {
+      #questionModal .actions {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center; /* ✅ 가운데 정렬 */
         gap: 0.75rem;
         margin-top: 1rem;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
     </style>
   </head>
@@ -96,10 +99,9 @@
     <footer class="footer">© 2025 QuizMaker</footer>
 
     <!-- Modal -->
-    <div id="questionModal" class="modal-overlay">
+    <div id="questionModal">
       <div class="modal-content">
         <h3 id="modalTitle">문제 만들기</h3>
-
         <label for="questionText">문제 텍스트</label>
         <textarea
           id="questionText"
@@ -125,14 +127,14 @@
           value="30"
         />
 
-        <div style="margin-top: 0.5rem">
+        <div style="display: flex; gap: 1rem; margin-top: 0.5rem">
           <label><input id="doublePoints" type="checkbox" /> 점수 두배</label>
         </div>
 
         <h4 style="margin-top: 0.75rem">답변 (4개)</h4>
         <div id="answersContainer"></div>
 
-        <div class="modal-actions">
+        <div class="actions">
           <button id="saveQuestionBtn" class="btn-primary">저장</button>
           <button id="cancelModalBtn" class="small-btn secondary">취소</button>
         </div>
@@ -182,9 +184,6 @@
         answersContainer.innerHTML = "";
         for (let i = 0; i < 4; i++) {
           const div = document.createElement("div");
-          div.style.display = "flex";
-          div.style.gap = "0.5rem";
-          div.style.marginBottom = "0.4rem";
           const inTxt = document.createElement("input");
           inTxt.type = "text";
           inTxt.className = "input-text";
@@ -293,14 +292,22 @@
             const ord = count || 0;
             const { data: q } = await db
               .from("questions")
-              .insert([{ quiz_id: quiz.id, ord, text, timeout, double_points }])
+              .insert([
+                {
+                  quiz_id: quiz.id,
+                  ord,
+                  text,
+                  timeout,
+                  double_points: doublePoints,
+                },
+              ])
               .select()
               .single();
             questionId = q.id;
           } else {
             await db
               .from("questions")
-              .update({ text, timeout, double_points })
+              .update({ text, timeout, double_points: doublePoints })
               .eq("id", questionId);
             await db.from("answers").delete().eq("question_id", questionId);
           }
