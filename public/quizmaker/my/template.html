@@ -46,9 +46,11 @@
         background: rgba(0, 0, 0, 0.6);
         align-items: center;
         justify-content: center;
+        z-index: 1000;
       "
     >
       <div
+        class="modal-content"
         style="
           background: #fff;
           color: #111;
@@ -56,32 +58,35 @@
           width: 90%;
           max-width: 640px;
           border-radius: 12px;
+          z-index: 1001;
         "
       >
         <h3 id="modalTitle">문제 만들기</h3>
-        <label>문제 텍스트</label>
+        <label for="questionText">문제 텍스트</label>
         <textarea
           id="questionText"
           class="input-text"
-          style="height: 80px"
+          style="height: 80px; width: 100%"
         ></textarea>
 
-        <label>문제 이미지</label>
+        <label for="questionImage">문제 이미지</label>
         <input
           id="questionImage"
           type="file"
           accept="image/*"
           class="input-file"
+          style="width: 100%"
         />
         <div id="questionImagePreview" style="margin-top: 0.5rem"></div>
 
-        <label>타임아웃(초)</label>
+        <label for="timeout">타임아웃(초)</label>
         <input
           id="timeout"
           class="input-text"
           type="number"
           min="5"
           value="30"
+          style="width: 100%"
         />
 
         <div style="display: flex; gap: 1rem; margin-top: 0.5rem">
@@ -155,6 +160,7 @@
           inTxt.type = "text";
           inTxt.className = "input-text";
           inTxt.placeholder = `답변 ${i + 1}`;
+          inTxt.style.flex = "1";
           const chk = document.createElement("input");
           chk.type = "checkbox";
           chk.title = "정답 여부";
