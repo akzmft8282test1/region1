@@ -49,15 +49,9 @@
         display: flex;
         gap: 0.5rem;
         margin-bottom: 0.4rem;
-        align-items: center;
       }
       #answersContainer input[type="text"] {
         flex: 1;
-      }
-      #answersContainer img {
-        max-width: 40px;
-        max-height: 40px;
-        border-radius: 6px;
       }
       #questionModal .actions {
         display: flex;
@@ -122,16 +116,7 @@
           accept="image/*"
           class="input-file"
         />
-        <img
-          id="questionImagePreview"
-          alt="문제 이미지 미리보기"
-          style="
-            max-width: 160px;
-            margin-top: 0.5rem;
-            border-radius: 8px;
-            display: none;
-          "
-        />
+        <div id="questionImagePreview" style="margin-top: 0.5rem"></div>
 
         <label for="timeout">타임아웃(초)</label>
         <input
@@ -177,20 +162,15 @@
 
       let editingQuestionId = null;
 
-      function openModal(edit = false, q = null) {
+      function openModal(edit = false) {
         modal.style.display = "flex";
-        qText.value = q?.text || "";
-        timeoutEl.value = q?.timeout || 30;
-        doublePointsEl.checked = !!q?.double_points;
+        qText.value = "";
         qImage.value = "";
-        if (q?.image_url) {
-          qImgPreview.src = q.image_url;
-          qImgPreview.style.display = "block";
-        } else {
-          qImgPreview.style.display = "none";
-        }
+        qImgPreview.innerHTML = "";
+        timeoutEl.value = 30;
+        doublePointsEl.checked = false;
         renderAnswerInputs();
-        editingQuestionId = q?.id || null;
+        editingQuestionId = null;
         modalTitle.textContent = edit ? "문제 수정" : "문제 만들기";
       }
       function closeModal() {
@@ -199,20 +179,6 @@
 
       addBtn.addEventListener("click", () => openModal(false));
       cancelBtn.addEventListener("click", closeModal);
-
-      qImage.addEventListener("change", (e) => {
-        const f = e.target.files[0];
-        if (!f) {
-          qImgPreview.style.display = "none";
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          qImgPreview.src = ev.target.result;
-          qImgPreview.style.display = "block";
-        };
-        reader.readAsDataURL(f);
-      });
 
       function renderAnswerInputs(vals) {
         answersContainer.innerHTML = "";
@@ -238,11 +204,12 @@
 
       async function loadQuizAndQuestions() {
         try {
-          const { data: quiz } = await db
+          const { data: quiz, error } = await db
             .from("quizzes")
             .select("*")
             .eq("slug", slug)
             .maybeSingle();
+          if (error) throw error;
           if (!quiz) {
             alert("퀴즈를 찾을 수 없습니다.");
             window.location.href = "/quizmaker";
@@ -269,13 +236,7 @@
               li.style.display = "flex";
               li.style.justifyContent = "space-between";
               li.style.alignItems = "center";
-
-              let inner = `${idx + 1}. ${q.text || "(문제 없음)"}`;
-              if (q.image_url) {
-                inner += ` <img src="${q.image_url}" alt="문제 이미지" style="max-width:40px;max-height:40px;border-radius:6px;margin-left:0.5rem"/>`;
-              }
-
-              li.innerHTML = `<span>${inner}</span>`;
+              li.innerHTML = `<span>${idx + 1}. ${q.text || "(문제 없음)"}</span>`;
               const box = document.createElement("div");
               box.style.display = "flex";
               box.style.gap = "0.4rem";
@@ -287,11 +248,17 @@
               delBtn.className = "small-btn secondary";
               delBtn.textContent = "🗑 삭제";
               delBtn.onclick = () => deleteQuestion(q.id);
+              const dupBtn = document.createElement("button");
+              dupBtn.className = "small-btn";
+              dupBtn.textContent = "📄 복제";
+              dupBtn.onclick = () => duplicateQuestion(q.id);
               box.appendChild(editBtn);
+              box.appendChild(dupBtn);
               box.appendChild(delBtn);
               li.appendChild(box);
               questionListEl.appendChild(li);
             });
+            enableDragAndDrop();
           }
         } catch (err) {
           console.error("loadQuizAndQuestions", err);
@@ -317,14 +284,6 @@
           if (!quiz) throw new Error("quiz not found");
 
           let questionId = editingQuestionId;
-          let imageUrl = null;
-
-          if (qImage.files && qImage.files[0]) {
-            const ext = qImage.files[0].name.split(".").pop();
-            const path = `question-images/${Date.now()}.${ext}`;
-            imageUrl = await uploadImage(qImage.files[0], path);
-          }
-
           if (!questionId) {
             const { count } = await db
               .from("questions")
@@ -340,16 +299,16 @@
                   text,
                   timeout,
                   double_points: doublePoints,
-                  image_url: imageUrl,
                 },
               ])
               .select()
               .single();
             questionId = q.id;
           } else {
-            const updateData = { text, timeout, double_points: doublePoints };
-            if (imageUrl) updateData.image_url = imageUrl;
-            await db.from("questions").update(updateData).eq("id", questionId);
+            await db
+              .from("questions")
+              .update({ text, timeout, double_points: doublePoints })
+              .eq("id", questionId);
             await db.from("answers").delete().eq("question_id", questionId);
           }
 
@@ -392,7 +351,10 @@
             .eq("question_id", qid)
             .order("ord");
           editingQuestionId = qid;
-          openModal(true, q);
+          openModal(true);
+          qText.value = q.text || "";
+          timeoutEl.value = q.timeout || 30;
+          doublePointsEl.checked = !!q.double_points;
           renderAnswerInputs(answers || []);
         } catch (err) {
           console.error(err);
@@ -412,6 +374,82 @@
         }
       }
 
+      async function duplicateQuestion(qid) {
+        try {
+          const { data: q } = await db
+            .from("questions")
+            .select("*")
+            .eq("id", qid)
+            .single();
+          const { data: answers } = await db
+            .from("answers")
+            .select("*")
+            .eq("question_id", qid)
+            .order("ord");
+          const { data: newQ } = await db
+            .from("questions")
+            .insert([
+              {
+                quiz_id: q.quiz_id,
+                text: q.text + " (복제)",
+                timeout: q.timeout,
+                double_points: q.double_points,
+              },
+            ])
+            .select()
+            .single();
+          if (answers && answers.length) {
+            const clones = answers.map((a) => ({
+              question_id: newQ.id,
+              ord: a.ord,
+              text: a.text,
+              is_correct: a.is_correct,
+            }));
+            await db.from("answers").insert(clones);
+          }
+          loadQuizAndQuestions();
+        } catch (err) {
+          console.error(err);
+          alert("복제 실패");
+        }
+      }
+
+      function enableDragAndDrop() {
+        const list = questionListEl;
+        let dragItem = null;
+        list.querySelectorAll("li").forEach((li) => {
+          li.addEventListener("dragstart", () => {
+            dragItem = li;
+            setTimeout(() => (li.style.opacity = "0.4"), 0);
+          });
+          li.addEventListener("dragend", () => {
+            li.style.opacity = "1";
+            dragItem = null;
+          });
+          li.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            const draggingOver = li;
+            if (dragItem && draggingOver !== dragItem) {
+              const items = [...list.children];
+              const dragIndex = items.indexOf(dragItem);
+              const overIndex = items.indexOf(draggingOver);
+              if (dragIndex < overIndex)
+                list.insertBefore(dragItem, draggingOver.nextSibling);
+              else list.insertBefore(dragItem, draggingOver);
+            }
+          });
+        });
+
+        list.addEventListener("drop", async () => {
+          const items = [...list.children];
+          for (let i = 0; i < items.length; i++) {
+            const id = items[i].dataset.id;
+            await db.from("questions").update({ ord: i }).eq("id", id);
+          }
+          loadQuizAndQuestions();
+        });
+      }
+
       shareBtn.addEventListener("click", async () => {
         const url = `${window.location.origin}/quiz/${slug}`;
         try {
@@ -425,7 +463,6 @@
           alert(url);
         }
       });
-
       hostBtn.addEventListener("click", () => {
         window.location.href = `/host/${slug}`;
       });

@@ -12,8 +12,8 @@
   <body>
     <header class="header"><h1>새 퀴즈 만들기</h1></header>
 
-    <main style="padding: 1.25rem; display: flex; justify-content: center">
-      <section class="card" style="max-width: 480px; width: 100%">
+    <main style="padding: 1.25rem">
+      <section class="card">
         <label for="quizName">퀴즈 이름</label>
         <input
           id="quizName"
@@ -55,7 +55,7 @@
     <footer class="footer">© 2025 QuizMaker</footer>
 
     <script>
-      // Supabase storage bucket
+      // ⚡ db는 app.js에서 이미 전역 생성됨 → 여기서 재선언 X
       const bucket = window.__QUIZ_BUCKET__ || "quiz-assets";
 
       const quizNameEl = document.getElementById("quizName");
@@ -63,7 +63,6 @@
       const previewEl = document.getElementById("imagePreview");
       const createBtn = document.getElementById("createQuizBtn");
 
-      // ✅ 이미지 미리보기
       quizImageEl.addEventListener("change", (e) => {
         const f = e.target.files[0];
         if (!f) {
@@ -78,23 +77,37 @@
         reader.readAsDataURL(f);
       });
 
+      async function uploadImage(file, path) {
+        try {
+          const { error } = await db.storage
+            .from(bucket)
+            .upload(path, file, { upsert: true });
+          if (error) throw error;
+
+          const { data: pub } = await db.storage
+            .from(bucket)
+            .getPublicUrl(path);
+          return pub.publicUrl;
+        } catch (err) {
+          console.error("uploadImage err", err);
+          return null;
+        }
+      }
+
       createBtn.addEventListener("click", async () => {
         const name = quizNameEl.value.trim();
         if (!name) {
           alert("퀴즈 이름을 입력하세요.");
           return;
         }
-
         try {
-          // ✅ 이미지 업로드
           let imageUrl = null;
           if (quizImageEl.files && quizImageEl.files[0]) {
             const ext = quizImageEl.files[0].name.split(".").pop();
             const path = `quiz-thumbnails/${Date.now()}.${ext}`;
-            imageUrl = await uploadImage(quizImageEl.files[0], path, bucket);
+            imageUrl = await uploadImage(quizImageEl.files[0], path);
           }
 
-          // ✅ DB에 퀴즈 생성
           const res = await fetch("/api/quizzes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -103,13 +116,10 @@
               settings: { image: imageUrl },
             }),
           });
-
           const result = await res.json();
-          if (!res.ok || result.error) {
+          if (!res.ok || result.error)
             throw new Error(result.error || "퀴즈 생성 실패");
-          }
 
-          // ✅ 관리 페이지로 이동
           window.location.href = `/quizmaker/my/${result.quiz.slug}`;
         } catch (err) {
           console.error("create quiz err", err);

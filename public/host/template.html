@@ -8,49 +8,36 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>퀴즈 호스트</title>
     <link rel="stylesheet" href="/styles.css" />
-    <style>
-      .answer-list {
-        display: grid;
-        gap: 0.5rem;
-        margin-top: 1rem;
-      }
-      .answer-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: #2b2b3d;
-        padding: 0.6rem;
-        border-radius: 8px;
-      }
-      .answer-item img {
-        max-width: 40px;
-        max-height: 40px;
-        border-radius: 6px;
-      }
-      .player-answered {
-        color: #4caf50;
-        font-weight: 600;
-      }
-      .player-waiting {
-        color: #ccc;
-      }
-    </style>
   </head>
   <body>
     <header class="header"><h1 id="quizTitle">퀴즈 호스트</h1></header>
 
-    <main class="main-container" style="grid-template-columns: 1fr 1fr">
-      <!-- 컨트롤 -->
+    <main class="main-container" style="grid-template-columns: 1fr">
       <section class="card">
-        <div style="display: flex; gap: 0.75rem; justify-content: center">
-          <button id="startBtn" class="btn-primary">퀴즈 시작</button>
-          <button id="nextBtn" class="btn-primary" style="display: none">
+        <div
+          style="
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            justify-content: center;
+          "
+        >
+          <button id="startBtn" class="btn-primary" aria-label="퀴즈 시작">
+            퀴즈 시작
+          </button>
+          <button
+            id="nextBtn"
+            class="btn-primary"
+            style="display: none"
+            aria-label="다음 문제"
+          >
             다음 문제 ▶
           </button>
           <button
             id="endGameBtn"
             class="btn-primary"
             style="background: linear-gradient(90deg, #ff5f6d, #ffc371)"
+            aria-label="게임 종료"
           >
             게임 종료
           </button>
@@ -62,28 +49,17 @@
         >
           참가자를 기다리는 중...
         </div>
-
-        <h2 style="margin-top: 1rem">현재 문제</h2>
-        <div id="questionBox" style="margin-top: 0.5rem">
-          <div id="questionText"></div>
-          <img
-            id="questionImage"
-            style="max-width: 240px; margin-top: 0.5rem; display: none"
-            alt="문제 이미지"
-          />
-          <div id="answerList" class="answer-list"></div>
-        </div>
       </section>
 
-      <!-- 참가자 -->
       <section class="card">
         <h2>참가자 목록</h2>
-        <table id="playerTable">
+        <table id="playerTable" aria-label="참가자 목록">
           <thead>
             <tr>
               <th>닉네임</th>
               <th>점수</th>
-              <th>응답</th>
+              <th>답변</th>
+              <!-- ✅ 답변 여부 표시 -->
             </tr>
           </thead>
           <tbody></tbody>
@@ -99,7 +75,6 @@
     <script>
       const slug = window.location.pathname.split("/").pop();
       let gameId = null;
-      let quizId = null;
 
       const startBtn = document.getElementById("startBtn");
       const nextBtn = document.getElementById("nextBtn");
@@ -107,48 +82,41 @@
       const statusText = document.getElementById("statusText");
       const playerTableBody = document.querySelector("#playerTable tbody");
       const scoreboard = document.getElementById("scoreboard");
-      const qText = document.getElementById("questionText");
-      const qImg = document.getElementById("questionImage");
-      const answerList = document.getElementById("answerList");
-
-      // 참가자 목록/순위 표시
-      function renderPlayers(players, answeredSet) {
-        playerTableBody.innerHTML = "";
-        players.forEach((p) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${p.nickname}</td>
-            <td>${p.points}</td>
-            <td>${
-              answeredSet.has(p.id)
-                ? '<span class="player-answered">✔</span>'
-                : '<span class="player-waiting">…</span>'
-            }</td>
-          `;
-          playerTableBody.appendChild(tr);
-        });
-
-        scoreboard.innerHTML = "";
-        players.forEach((p, idx) => {
-          const li = document.createElement("li");
-          li.textContent = `${idx + 1}등 ${p.nickname} — ${p.points}점`;
-          scoreboard.appendChild(li);
-        });
-      }
 
       async function ensureGame() {
-        const { data: game } = await db
-          .from("games")
-          .select("id,quiz_id,started,current_question_ord,ended")
-          .eq("slug", slug)
-          .maybeSingle();
-        if (!game) return;
-        gameId = game.id;
-        quizId = game.quiz_id;
-        statusText.textContent = game.started ? "진행중" : "대기중";
-        if (game.started) {
-          nextBtn.style.display = "inline-block";
-          initQuestion(game.current_question_ord);
+        try {
+          const { data: game } = await db
+            .from("games")
+            .select("id,quiz_id,started,current_question_ord,ended")
+            .eq("slug", slug)
+            .maybeSingle();
+          if (game) {
+            gameId = game.id;
+            statusText.textContent = game.started ? "진행중" : "대기중";
+            nextBtn.style.display = game.started ? "inline-block" : "none";
+            return;
+          }
+          const { data: quiz } = await db
+            .from("quizzes")
+            .select("id,name")
+            .eq("slug", slug)
+            .maybeSingle();
+          if (!quiz) {
+            alert("해당 퀴즈가 없습니다.");
+            window.location.href = "/quizmaker";
+            return;
+          }
+          const { data: newGame } = await db
+            .from("games")
+            .insert([{ quiz_id: quiz.id, slug }])
+            .select()
+            .single();
+          gameId = newGame.id;
+          document.getElementById("quizTitle").textContent =
+            quiz.name + " (호스트)";
+        } catch (err) {
+          console.error("ensureGame", err);
+          alert("게임 확보 실패: " + (err.message || err));
         }
       }
 
@@ -159,86 +127,92 @@
           .select("id,nickname,points")
           .eq("game_id", gameId)
           .order("points", { ascending: false });
-        const { data: answers } = await db
-          .from("player_answers")
-          .select("player_id,question_id")
-          .eq("question_id", currentQuestion?.id || -1);
-        const answeredSet = new Set(answers?.map((a) => a.player_id));
-        renderPlayers(players || [], answeredSet);
-      }
+        if (!players) return;
 
-      async function initQuestion(ord) {
-        if (ord == null || ord < 0) {
-          qText.textContent = "호스트가 시작 버튼을 눌러주세요.";
-          qImg.style.display = "none";
-          answerList.innerHTML = "";
-          return;
-        }
-        const { data: question } = await db
-          .from("questions")
-          .select("id,text,image_url,timeout,double_points")
-          .eq("quiz_id", quizId)
-          .eq("ord", ord)
-          .maybeSingle();
-        if (!question) return;
-
-        currentQuestion = question;
-        qText.textContent = question.text;
-        if (question.image_url) {
-          qImg.src = question.image_url;
-          qImg.style.display = "block";
-        } else {
-          qImg.style.display = "none";
-        }
-
-        const { data: answers } = await db
-          .from("answers")
-          .select("*")
-          .eq("question_id", question.id)
-          .order("ord");
-        answerList.innerHTML = "";
-        answers.forEach((a) => {
-          const div = document.createElement("div");
-          div.className = "answer-item";
-          if (a.image_url) {
-            const img = document.createElement("img");
-            img.src = a.image_url;
-            img.alt = "답변 이미지";
-            div.appendChild(img);
+        // ✅ 현재 문제 답변 여부 체크
+        let answers = [];
+        try {
+          const { data: game } = await db
+            .from("games")
+            .select("current_question_ord,quiz_id")
+            .eq("id", gameId)
+            .single();
+          if (game && game.current_question_ord >= 0) {
+            const { data: q } = await db
+              .from("questions")
+              .select("id")
+              .eq("quiz_id", game.quiz_id)
+              .eq("ord", game.current_question_ord)
+              .maybeSingle();
+            if (q) {
+              const { data: ans } = await db
+                .from("player_answers")
+                .select("player_id")
+                .eq("question_id", q.id);
+              answers = ans || [];
+            }
           }
-          const span = document.createElement("span");
-          span.textContent = a.text || "보기";
-          div.appendChild(span);
-          answerList.appendChild(div);
+        } catch (err) {
+          console.warn("loadPlayers answers check err", err);
+        }
+
+        playerTableBody.innerHTML = "";
+        players.forEach((p) => {
+          const tr = document.createElement("tr");
+          const answered = answers.find((a) => a.player_id === p.id)
+            ? "✅"
+            : "❌";
+          tr.innerHTML = `<td>${p.nickname}</td><td>${p.points}</td><td>${answered}</td>`;
+          playerTableBody.appendChild(tr);
         });
 
-        loadPlayers();
+        renderScoreboard(players);
       }
 
-      // supabase realtime
+      function renderScoreboard(players) {
+        scoreboard.innerHTML = "";
+        players.forEach((p, idx) => {
+          const li = document.createElement("li");
+          li.className =
+            idx === 0 ? "top1" : idx === 1 ? "top2" : idx === 2 ? "top3" : "";
+          li.innerHTML = `<span>${idx + 1}등 - ${p.nickname}</span> <span>${p.points}점</span>`;
+          scoreboard.appendChild(li);
+        });
+      }
+
       function subscribePlayers() {
+        if (!gameId) return;
         db.channel("players-" + gameId)
           .on(
             "postgres_changes",
-            { event: "*", schema: "public", table: "players" },
+            {
+              event: "*",
+              schema: "public",
+              table: "players",
+              filter: `game_id=eq.${gameId}`,
+            },
             loadPlayers,
           )
           .subscribe();
-      }
-      function subscribeAnswers() {
-        db.channel("player_answers-" + gameId)
+        db.channel("answers-" + gameId)
           .on(
             "postgres_changes",
-            { event: "INSERT", schema: "public", table: "player_answers" },
+            { event: "*", schema: "public", table: "player_answers" },
             loadPlayers,
           )
           .subscribe();
       }
       function subscribeGame() {
+        if (!gameId) return;
         db.channel("games-" + gameId)
           .on(
             "postgres_changes",
-            { event: "UPDATE", schema: "public", table: "games" },
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "games",
+              filter: `id=eq.${gameId}`,
+            },
             (payload) => {
               const g = payload.new;
               statusText.textContent = g.started
@@ -246,18 +220,17 @@
                 : g.ended
                   ? "종료됨"
                   : "대기중";
+              nextBtn.style.display = g.started ? "inline-block" : "none";
               if (g.ended) {
                 window.location.href = `/quiz/${slug}/leaderboard`;
-              } else {
-                initQuestion(g.current_question_ord);
               }
             },
           )
           .subscribe();
       }
 
-      // 버튼 이벤트
       startBtn.addEventListener("click", async () => {
+        if (!gameId) return;
         await db
           .from("games")
           .update({ started: true, current_question_ord: 0 })
@@ -265,39 +238,41 @@
         startBtn.style.display = "none";
         nextBtn.style.display = "inline-block";
       });
+
       nextBtn.addEventListener("click", async () => {
+        if (!gameId) return;
         const { data: game } = await db
           .from("games")
           .select("current_question_ord,quiz_id")
           .eq("id", gameId)
           .single();
-        const { data: qList } = await db
+        const qres = await db
           .from("questions")
           .select("id,ord")
           .eq("quiz_id", game.quiz_id)
-          .order("ord");
-        const total = qList.length;
-        if (game.current_question_ord + 1 < total) {
+          .order("ord", { ascending: true });
+        const total = qres?.length || 0;
+        const current = game.current_question_ord;
+        if (current + 1 < total) {
           await db
             .from("games")
-            .update({ current_question_ord: game.current_question_ord + 1 })
+            .update({ current_question_ord: current + 1 })
             .eq("id", gameId);
         } else {
           await db.from("games").update({ ended: true }).eq("id", gameId);
         }
       });
+
       endGameBtn.addEventListener("click", async () => {
         if (!confirm("게임을 종료하시겠습니까?")) return;
         await db.from("games").update({ ended: true }).eq("id", gameId);
         window.location.href = `/quiz/${slug}/leaderboard`;
       });
 
-      let currentQuestion = null;
-
       (async () => {
         await ensureGame();
+        await loadPlayers();
         subscribePlayers();
-        subscribeAnswers();
         subscribeGame();
       })();
     </script>

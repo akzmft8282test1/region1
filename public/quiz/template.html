@@ -8,37 +8,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>퀴즈 참가</title>
     <link rel="stylesheet" href="/styles.css" />
-    <style>
-      .answer-btn {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin: 0.4rem 0;
-        padding: 0.6rem;
-        border-radius: 8px;
-        background: #2a2a3d;
-        color: #fff;
-        cursor: pointer;
-        border: none;
-        width: 100%;
-        text-align: left;
-      }
-      .answer-btn img {
-        max-width: 40px;
-        max-height: 40px;
-        border-radius: 6px;
-      }
-      .timer-danger {
-        color: #ff4d4f;
-        font-weight: bold;
-      }
-    </style>
   </head>
   <body>
     <header class="header"><h1 id="quizTitle">퀴즈 참가</h1></header>
 
     <main style="padding: 1.25rem; flex: 1">
-      <!-- 닉네임 입력 -->
       <section id="nicknameSection" class="card" aria-label="닉네임 입력">
         <label for="nicknameInput">닉네임</label>
         <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
@@ -52,12 +26,11 @@
           <button id="joinBtn" class="btn-primary">참가</button>
         </div>
         <p style="color: var(--muted); margin-top: 0.5rem">
-          이 사이트는 localStorage로 세션을 보존합니다. 새로고침해도 진행/점수가
-          유지됩니다.
+          이 사이트는 IP/localStorage로 세션을 보존합니다. 새로고침해도
+          진행/점수가 유지됩니다.
         </p>
       </section>
 
-      <!-- 문제 박스 -->
       <section
         id="questionBox"
         class="card"
@@ -112,6 +85,7 @@
       let timerInterval = null;
       let questionStartTime = null;
 
+      // helper: get or create game record by slug
       async function ensureGameRecord() {
         const { data: game } = await db
           .from("games")
@@ -123,6 +97,7 @@
         return game;
       }
 
+      // join / session restore
       async function joinGame() {
         try {
           const game = await ensureGameRecord();
@@ -194,7 +169,7 @@
                 window.location.href = `/quiz/${slug}/leaderboard`;
               }
               if (typeof g.current_question_ord === "number") {
-                initQuestion(g.current_question_ord);
+                initQuestion(g.current_question_ord); // ✅ 호스트가 next 누르면 모든 참가자가 강제로 이동
               }
             },
           )
@@ -254,15 +229,7 @@
         answers.forEach((a) => {
           const btn = document.createElement("button");
           btn.className = "answer-btn";
-          if (a.image_url) {
-            const img = document.createElement("img");
-            img.src = a.image_url;
-            img.alt = "답변 이미지";
-            btn.appendChild(img);
-          }
-          const span = document.createElement("span");
-          span.textContent = a.text || "보기";
-          btn.appendChild(span);
+          btn.textContent = a.text || "보기";
           btn.onclick = () => submitAnswer(question, a);
           answersEl.appendChild(btn);
         });
