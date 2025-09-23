@@ -58,8 +58,6 @@
             <tr>
               <th>닉네임</th>
               <th>점수</th>
-              <th>답변</th>
-              <!-- ✅ 답변 여부 표시 -->
             </tr>
           </thead>
           <tbody></tbody>
@@ -83,6 +81,26 @@
       const playerTableBody = document.querySelector("#playerTable tbody");
       const scoreboard = document.getElementById("scoreboard");
 
+      // 유틸
+      function renderPlayersTable(players) {
+        playerTableBody.innerHTML = "";
+        players.forEach((p) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${p.nickname}</td><td>${p.points}</td>`;
+          playerTableBody.appendChild(tr);
+        });
+      }
+      function renderScoreboard(players) {
+        scoreboard.innerHTML = "";
+        players.forEach((p, idx) => {
+          const li = document.createElement("li");
+          li.className =
+            idx === 0 ? "top1" : idx === 1 ? "top2" : idx === 2 ? "top3" : "";
+          li.innerHTML = `<span>${idx + 1}등 - ${p.nickname}</span> <span>${p.points}점</span>`;
+          scoreboard.appendChild(li);
+        });
+      }
+
       async function ensureGame() {
         try {
           const { data: game } = await db
@@ -96,6 +114,7 @@
             nextBtn.style.display = game.started ? "inline-block" : "none";
             return;
           }
+          // 게임 레코드가 없으면 생성
           const { data: quiz } = await db
             .from("quizzes")
             .select("id,name")
@@ -106,17 +125,18 @@
             window.location.href = "/quizmaker";
             return;
           }
-          const { data: newGame } = await db
+          const { data: newGame, error } = await db
             .from("games")
             .insert([{ quiz_id: quiz.id, slug }])
             .select()
             .single();
+          if (error) throw error;
           gameId = newGame.id;
           document.getElementById("quizTitle").textContent =
             quiz.name + " (호스트)";
         } catch (err) {
           console.error("ensureGame", err);
-          alert("게임 확보 실패: " + (err.message || err));
+          safeAlert("게임 확보에 실패했습니다: " + (err.message || err));
         }
       }
 
@@ -124,62 +144,15 @@
         if (!gameId) return;
         const { data: players } = await db
           .from("players")
-          .select("id,nickname,points")
+          .select("nickname,points")
           .eq("game_id", gameId)
           .order("points", { ascending: false });
         if (!players) return;
-
-        // ✅ 현재 문제 답변 여부 체크
-        let answers = [];
-        try {
-          const { data: game } = await db
-            .from("games")
-            .select("current_question_ord,quiz_id")
-            .eq("id", gameId)
-            .single();
-          if (game && game.current_question_ord >= 0) {
-            const { data: q } = await db
-              .from("questions")
-              .select("id")
-              .eq("quiz_id", game.quiz_id)
-              .eq("ord", game.current_question_ord)
-              .maybeSingle();
-            if (q) {
-              const { data: ans } = await db
-                .from("player_answers")
-                .select("player_id")
-                .eq("question_id", q.id);
-              answers = ans || [];
-            }
-          }
-        } catch (err) {
-          console.warn("loadPlayers answers check err", err);
-        }
-
-        playerTableBody.innerHTML = "";
-        players.forEach((p) => {
-          const tr = document.createElement("tr");
-          const answered = answers.find((a) => a.player_id === p.id)
-            ? "✅"
-            : "❌";
-          tr.innerHTML = `<td>${p.nickname}</td><td>${p.points}</td><td>${answered}</td>`;
-          playerTableBody.appendChild(tr);
-        });
-
+        renderPlayersTable(players);
         renderScoreboard(players);
       }
 
-      function renderScoreboard(players) {
-        scoreboard.innerHTML = "";
-        players.forEach((p, idx) => {
-          const li = document.createElement("li");
-          li.className =
-            idx === 0 ? "top1" : idx === 1 ? "top2" : idx === 2 ? "top3" : "";
-          li.innerHTML = `<span>${idx + 1}등 - ${p.nickname}</span> <span>${p.points}점</span>`;
-          scoreboard.appendChild(li);
-        });
-      }
-
+      // Realtime 구독
       function subscribePlayers() {
         if (!gameId) return;
         db.channel("players-" + gameId)
@@ -191,14 +164,7 @@
               table: "players",
               filter: `game_id=eq.${gameId}`,
             },
-            loadPlayers,
-          )
-          .subscribe();
-        db.channel("answers-" + gameId)
-          .on(
-            "postgres_changes",
-            { event: "*", schema: "public", table: "player_answers" },
-            loadPlayers,
+            () => loadPlayers(),
           )
           .subscribe();
       }
@@ -229,45 +195,69 @@
           .subscribe();
       }
 
+      // 버튼 이벤트
       startBtn.addEventListener("click", async () => {
-        if (!gameId) return;
-        await db
-          .from("games")
-          .update({ started: true, current_question_ord: 0 })
-          .eq("id", gameId);
-        startBtn.style.display = "none";
-        nextBtn.style.display = "inline-block";
+        if (!gameId) return safeAlert("게임 정보가 없습니다.");
+        try {
+          await db
+            .from("games")
+            .update({ started: true, current_question_ord: 0 })
+            .eq("id", gameId);
+          startBtn.style.display = "none";
+          nextBtn.style.display = "inline-block";
+        } catch (err) {
+          console.error(err);
+          safeAlert("시작 실패: " + (err.message || err));
+        }
       });
 
       nextBtn.addEventListener("click", async () => {
         if (!gameId) return;
-        const { data: game } = await db
-          .from("games")
-          .select("current_question_ord,quiz_id")
-          .eq("id", gameId)
-          .single();
-        const qres = await db
-          .from("questions")
-          .select("id,ord")
-          .eq("quiz_id", game.quiz_id)
-          .order("ord", { ascending: true });
-        const total = qres?.length || 0;
-        const current = game.current_question_ord;
-        if (current + 1 < total) {
-          await db
+        try {
+          const { data: game } = await db
             .from("games")
-            .update({ current_question_ord: current + 1 })
-            .eq("id", gameId);
-        } else {
-          await db.from("games").update({ ended: true }).eq("id", gameId);
+            .select("current_question_ord,quiz_id")
+            .eq("id", gameId)
+            .single();
+          const qres = await db
+            .from("questions")
+            .select("id,ord")
+            .eq("quiz_id", game.quiz_id)
+            .order("ord", { ascending: true });
+          const total = qres?.length || 0;
+          const current = game.current_question_ord;
+          if (current + 1 < total) {
+            await db
+              .from("games")
+              .update({ current_question_ord: current + 1 })
+              .eq("id", gameId);
+          } else {
+            await db.from("games").update({ ended: true }).eq("id", gameId);
+          }
+        } catch (err) {
+          console.error(err);
+          safeAlert("다음 문제 진행 실패: " + (err.message || err));
         }
       });
 
       endGameBtn.addEventListener("click", async () => {
         if (!confirm("게임을 종료하시겠습니까?")) return;
-        await db.from("games").update({ ended: true }).eq("id", gameId);
-        window.location.href = `/quiz/${slug}/leaderboard`;
+        try {
+          await db.from("games").update({ ended: true }).eq("id", gameId);
+          window.location.href = `/quiz/${slug}/leaderboard`;
+        } catch (err) {
+          console.error(err);
+          safeAlert("종료 실패: " + (err.message || err));
+        }
       });
+
+      function safeAlert(msg) {
+        try {
+          alert(msg);
+        } catch (e) {
+          console.log(msg);
+        }
+      }
 
       (async () => {
         await ensureGame();
