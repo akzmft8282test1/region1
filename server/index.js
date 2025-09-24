@@ -209,6 +209,44 @@ app.post("/api/quizzes/:slug/questions", async (req, res) => {
 });
 
 /* ------------------------------
+   Slug 관리 라우트 (추가된 부분)
+   - 퀴즈별 slug 조회/수정: /supa/slug/:id (GET, PUT)
+------------------------------ */
+app.get("/supa/slug/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from("quizzes")
+      .select("id,slug")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "quiz not found" });
+    res.json({ success: true, quiz: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+app.put("/supa/slug/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { slug } = req.body;
+    if (!slug) return res.status(400).json({ error: "slug required" });
+    const { data, error } = await supabase
+      .from("quizzes")
+      .update({ slug })
+      .eq("id", id)
+      .select("id,slug")
+      .single();
+    if (error) throw error;
+    res.json({ success: true, quiz: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+/* ------------------------------
    Healthcheck
 ------------------------------ */
 app.get("/api/ping", (req, res) =>

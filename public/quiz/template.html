@@ -85,6 +85,10 @@
       let timerInterval = null;
       let questionStartTime = null;
 
+      // local progression state (참가자 개별 진행)
+      let _localQuestions = [];
+      let _localIndex = 0;
+
       // helper: get or create game record by slug
       async function ensureGameRecord() {
         const { data: game } = await db
@@ -117,8 +121,25 @@
               nicknameInput.value = nicknameStored;
               nicknameSection.style.display = "none";
               questionBox.style.display = "block";
+
+              // 참가자는 전체 문제 목록을 로컬로 로드하여 개별 진행
+              const { data: questions } = await db
+                .from("questions")
+                .select(
+                  "id,ord,text,image_url,timeout,double_points,answers(*)",
+                )
+                .eq("quiz_id", game.quiz_id)
+                .order("ord");
+              _localQuestions = questions || [];
+
               subscribeGame(gameId);
-              initQuestion(game.current_question_ord);
+
+              // 게임이 이미 시작되었으면 개인 진행 시작
+              if (game.started) startLocalQuiz();
+              else {
+                questionText.textContent =
+                  "호스트가 시작할 때까지 대기 중입니다...";
+              }
               return;
             } else {
               localStorage.removeItem("playerId");
@@ -143,8 +164,23 @@
           localStorage.setItem("nickname", nickname);
           nicknameSection.style.display = "none";
           questionBox.style.display = "block";
+
+          // 참가자는 전체 문제 목록을 로컬로 로드하여 개별 진행
+          const { data: questions } = await db
+            .from("questions")
+            .select("id,ord,text,image_url,timeout,double_points,answers(*)")
+            .eq("quiz_id", game.quiz_id)
+            .order("ord");
+          _localQuestions = questions || [];
+
           subscribeGame(gameId);
-          initQuestion(game.current_question_ord);
+
+          // 게임이 이미 시작되었으면 개인 진행 시작
+          if (game.started) startLocalQuiz();
+          else {
+            questionText.textContent =
+              "호스트가 시작할 때까지 대기 중입니다...";
+          }
         } catch (err) {
           console.error("joinGame error", err);
           safeAlert("참가 실패: " + (err.message || err));
@@ -168,15 +204,106 @@
               if (g.ended) {
                 window.location.href = `/quiz/${slug}/leaderboard`;
               }
-              if (typeof g.current_question_ord === "number") {
-                initQuestion(g.current_question_ord);
+              // 호스트가 started를 true로 설정하면 개인 진행 시작
+              if (g.started) {
+                // only start if local questions exist
+                if (_localQuestions && _localQuestions.length > 0) {
+                  startLocalQuiz();
+                } else {
+                  // attempt to fetch questions if not loaded yet
+                  (async () => {
+                    const { data: game } = await db
+                      .from("games")
+                      .select("quiz_id")
+                      .eq("id", gameId)
+                      .single();
+                    const { data: questions } = await db
+                      .from("questions")
+                      .select(
+                        "id,ord,text,image_url,timeout,double_points,answers(*)",
+                      )
+                      .eq("quiz_id", game.quiz_id)
+                      .order("ord");
+                    _localQuestions = questions || [];
+                    if (_localQuestions.length > 0) startLocalQuiz();
+                  })();
+                }
               }
             },
           )
           .subscribe();
       }
 
+      // --- 개인 진행 로직: startLocalQuiz / renderLocalQuestion / submitAnswerAndNext ---
+      function startLocalQuiz() {
+        _localIndex = 0;
+        if (!Array.isArray(_localQuestions) || _localQuestions.length === 0) {
+          questionText.textContent = "문제가 없습니다.";
+          return;
+        }
+        renderLocalQuestion(_localIndex);
+      }
+
+      function renderLocalQuestion(idx) {
+        const question = _localQuestions[idx];
+        if (!question) {
+          // 개인 완료: 리더보드로 이동 (호스트가 아직 모든 참가자 완료를 기다리는 경우도 있고,
+          // 호스트의 checkAllFinished가 동작하면 전체 리더보드 페이지로 이동됩니다)
+          window.location.href = `/quiz/${slug}/leaderboard`;
+          return;
+        }
+        currentQuestion = question;
+        renderQuestionLocal(question);
+      }
+
+      // 렌더링 함수: 기존 renderQuestion과 유사하지만 'question' 구조는 answers 포함
+      async function renderQuestionLocal(question) {
+        // reuse current render UI
+        questionText.textContent = question.text || "(문제 없음)";
+        if (question.image_url) {
+          questionImage.src = question.image_url;
+          questionImage.style.display = "block";
+        } else {
+          questionImage.style.display = "none";
+        }
+
+        answersEl.innerHTML = "";
+        // answers may be nested under question.answers
+        const answers = question.answers || [];
+        answers.forEach((a) => {
+          const btn = document.createElement("button");
+          btn.className = "answer-btn";
+          btn.textContent = a.text || "보기";
+          btn.onclick = () => submitAnswerAndNext(question, a);
+          answersEl.appendChild(btn);
+        });
+
+        // start timer for this local question
+        clearTimer();
+        questionStartTime = Date.now();
+        startTimer(question.timeout || 30, () => {
+          // timeout -> auto submit null (오답) and advance
+          submitAnswerAndNext(question, null);
+        });
+      }
+
+      // wrapper: 제출 후 개인 인덱스 증가 및 다음 문제 렌더
+      async function submitAnswerAndNext(question, answerObj) {
+        // call existing submitAnswer (which writes player_answers and updates points)
+        await submitAnswer(question, answerObj);
+
+        // advance local index
+        _localIndex += 1;
+        // small delay for feedback readability
+        setTimeout(() => {
+          renderLocalQuestion(_localIndex);
+        }, 600);
+      }
+
+      // 기존 init/render/submit 함수를 일부 재사용(아래)
       async function initQuestion(ord) {
+        // 기존 서버-driven initQuestion은 더 이상 모든 참가자 강제 이동에 사용하지 않음.
+        // 대신, 남아있는 코드와 호환되도록 빈 대기 표시 처리만 수행합니다.
         clearTimer();
         feedbackEl.textContent = "";
         if (ord === null || ord === undefined || ord < 0) {
@@ -187,31 +314,32 @@
           return;
         }
 
+        // (호스트가 current_question_ord를 바꾸는 용도로 쓰이지 않으므로 이 함수는
+        // 보조적인 역할만 합니다. 실제 문제 진행은 local progression으로 합니다.)
+        // 여기서는 안전을 위해 만약 localQuestions 비어있다면 불러오는 시도를 합니다.
         try {
-          const { data: game } = await db
-            .from("games")
-            .select("quiz_id")
-            .eq("id", gameId)
-            .single();
-          if (!game) return;
-          const { data: question } = await db
-            .from("questions")
-            .select("id,text,image_url,timeout,double_points,ord")
-            .eq("quiz_id", game.quiz_id)
-            .eq("ord", ord)
-            .maybeSingle();
-          if (!question) {
-            window.location.href = `/quiz/${slug}/leaderboard`;
-            return;
+          if (!Array.isArray(_localQuestions) || _localQuestions.length === 0) {
+            const { data: game } = await db
+              .from("games")
+              .select("quiz_id")
+              .eq("id", gameId)
+              .single();
+            const { data: questions } = await db
+              .from("questions")
+              .select("id,ord,text,image_url,timeout,double_points,answers(*)")
+              .eq("quiz_id", game.quiz_id)
+              .order("ord");
+            _localQuestions = questions || [];
           }
-          currentQuestion = question;
-          renderQuestion(question);
-        } catch (err) {
-          console.error("initQuestion err", err);
+        } catch (e) {
+          console.warn("initQuestion fallback fetch err", e);
         }
       }
 
       async function renderQuestion(question) {
+        // 이 함수은 server-driven 흐름에서 호출될 수 있으나,
+        // 이번 수정에서는 참가자 개인 진행에서 renderQuestionLocal을 사용합니다.
+        // 남겨두어 호환성을 유지합니다.
         questionText.textContent = question.text || "(문제 없음)";
         if (question.image_url) {
           questionImage.src = question.image_url;
@@ -230,12 +358,14 @@
           const btn = document.createElement("button");
           btn.className = "answer-btn";
           btn.textContent = a.text || "보기";
-          btn.onclick = () => submitAnswer(question, a);
+          btn.onclick = () => submitAnswerAndNext(question, a); // 변경: local flow 사용
           answersEl.appendChild(btn);
         });
 
+        clearTimer();
+        questionStartTime = Date.now();
         startTimer(question.timeout || 30, () => {
-          submitAnswer(question, null);
+          submitAnswerAndNext(question, null);
         });
       }
 
@@ -266,6 +396,7 @@
       }
 
       async function submitAnswer(question, answerObj) {
+        // 기존 로직 재사용: DB에 player_answers 삽입하고 RPC로 점수 증가 처리
         clearTimer();
         try {
           const timeTaken = Date.now() - (questionStartTime || Date.now());
