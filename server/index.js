@@ -16,6 +16,9 @@ const path = require("path");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { v4: uuidv4 } = require("uuid");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+
 console.log("DEBUG .env:", {
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_KEY: process.env.SUPABASE_KEY ? "(set)" : "(missing)",
@@ -35,6 +38,9 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// JWT 시크릿키
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 
 // CORS 설정
 let corsOptions = {};
@@ -85,6 +91,32 @@ function sendFileResponse(res, relPath) {
 }
 
 /* ------------------------------
+   Middleware: JWT 인증
+------------------------------ */
+function requireAuth(req, res, next) {
+  const auth = req.headers["authorization"];
+  if (!auth) return res.status(401).json({ error: "No authorization header" });
+
+  const token = auth.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Invalid auth header" });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded; // { username, admin }
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || !req.user.admin) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+/* ------------------------------
    Friendly routes
 ------------------------------ */
 app.get("/", (req, res) => sendFileResponse(res, "quizmaker.html"));
@@ -106,10 +138,65 @@ app.get("/quiz/:slug", (req, res) =>
 );
 
 /* ------------------------------
-   API: 퀴즈 생성 / 조회 / 문제 추가 / 게임 생성 / 참가
+   Auth Routes (회원가입 / 로그인)
 ------------------------------ */
+app.post("/api/register", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password)
+      return res.status(400).json({ error: "username & password required" });
 
-// 퀴즈 생성
+    const hash = await bcrypt.hash(password, 10);
+
+    // ⚠️ 일반 사용자는 무조건 admin = false
+    const { error } = await supabase.from("accounts").insert([
+      {
+        username,
+        password: hash,
+        admin: false,
+      },
+    ]);
+    if (error) throw error;
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+app.post("/api/login", async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password)
+      return res.status(400).json({ error: "username & password required" });
+
+    const { data: account, error } = await supabase
+      .from("accounts")
+      .select("*")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!account) return res.status(400).json({ error: "invalid credentials" });
+
+    const valid = await bcrypt.compare(password, account.password);
+    if (!valid) return res.status(400).json({ error: "invalid credentials" });
+
+    const token = jwt.sign(
+      { username: account.username, admin: account.admin },
+      JWT_SECRET,
+      { expiresIn: "6h" },
+    );
+
+    res.json({ success: true, token });
+  } catch (err) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
+/* ------------------------------
+   API: 퀴즈 생성 / 조회 / 문제 추가
+------------------------------ */
 app.post("/api/quizzes", async (req, res) => {
   try {
     const { name, settings } = req.body;
@@ -131,7 +218,6 @@ app.post("/api/quizzes", async (req, res) => {
   }
 });
 
-// 퀴즈 조회
 app.get("/api/quizzes/:slug", async (req, res) => {
   try {
     const { slug } = req.params;
@@ -156,7 +242,6 @@ app.get("/api/quizzes/:slug", async (req, res) => {
   }
 });
 
-// 문제 추가
 app.post("/api/quizzes/:slug/questions", async (req, res) => {
   try {
     const { slug } = req.params;
@@ -209,10 +294,9 @@ app.post("/api/quizzes/:slug/questions", async (req, res) => {
 });
 
 /* ------------------------------
-   Slug 관리 라우트 (추가된 부분)
-   - 퀴즈별 slug 조회/수정: /supa/slug/:id (GET, PUT)
+   Slug 관리 라우트 (Admin 전용)
 ------------------------------ */
-app.get("/supa/slug/:id", async (req, res) => {
+app.get("/supa/slug/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
@@ -228,7 +312,7 @@ app.get("/supa/slug/:id", async (req, res) => {
   }
 });
 
-app.put("/supa/slug/:id", async (req, res) => {
+app.put("/supa/slug/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { slug } = req.body;

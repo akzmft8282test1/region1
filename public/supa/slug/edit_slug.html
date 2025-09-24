@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Slug 수정</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <h1>퀴즈 Slug 수정</h1>
+    </header>
+
+    <main style="padding: 1.25rem; flex: 1">
+      <section class="card">
+        <h2>Slug 수정</h2>
+        <div style="margin-top: 0.5rem">
+          <label for="slugInput">새로운 Slug</label>
+          <input
+            id="slugInput"
+            type="text"
+            placeholder="새로운 Slug를 입력하세요"
+            class="input-text"
+            aria-label="새로운 Slug 입력"
+          />
+          <button id="updateBtn" class="btn-primary">Slug 수정</button>
+        </div>
+        <p id="statusMessage" style="margin-top: 0.5rem"></p>
+      </section>
+    </main>
+
+    <footer class="footer">© 2025 QuizMaker</footer>
+
+    <script>
+      const slugInput = document.getElementById("slugInput");
+      const updateBtn = document.getElementById("updateBtn");
+      const statusMessage = document.getElementById("statusMessage");
+
+      // URL에서 quizId 추출 (예: /supa/slug/edit_slug.html?id=123)
+      const urlParams = new URLSearchParams(window.location.search);
+      const quizId = urlParams.get("id");
+
+      // ✅ JWT 토큰 확인
+      const token = localStorage.getItem("token");
+      const isAdmin = localStorage.getItem("isAdmin") === "true";
+
+      if (!token || !isAdmin) {
+        alert("관리자 로그인이 필요합니다.");
+        window.location.href = "/login.html";
+      }
+
+      if (!quizId) {
+        statusMessage.textContent = "❌ URL에 ?id=QUIZ_ID 를 붙여주세요.";
+        statusMessage.style.color = "red";
+      }
+
+      // slug 업데이트 요청
+      updateBtn.addEventListener("click", async () => {
+        const newSlug = slugInput.value.trim();
+        if (!newSlug) {
+          statusMessage.textContent = "새로운 Slug를 입력해주세요!";
+          statusMessage.style.color = "red";
+          return;
+        }
+
+        try {
+          const response = await fetch(`/supa/slug/${quizId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`, // ✅ JWT 토큰 추가
+            },
+            body: JSON.stringify({ slug: newSlug }),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            statusMessage.textContent = `✅ Slug가 수정되었습니다: ${newSlug}`;
+            statusMessage.style.color = "green";
+          } else {
+            statusMessage.textContent = result.error || "Slug 수정 실패";
+            statusMessage.style.color = "red";
+          }
+        } catch (error) {
+          statusMessage.textContent = "서버 오류 발생. 다시 시도하세요.";
+          statusMessage.style.color = "red";
+        }
+      });
+    </script>
+  </body>
+</html>

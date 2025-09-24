@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>로그인</title>
+  </head>
+  <body>
+    <h1>로그인</h1>
+    <input id="username" placeholder="아이디" />
+    <input id="password" type="password" placeholder="비밀번호" />
+    <button id="loginBtn">로그인</button>
+    <p id="status"></p>
+
+    <p><a href="/register.html">👉 회원가입 하러가기</a></p>
+
+    <script>
+      document
+        .getElementById("loginBtn")
+        .addEventListener("click", async () => {
+          const username = document.getElementById("username").value.trim();
+          const password = document.getElementById("password").value.trim();
+          const status = document.getElementById("status");
+
+          try {
+            const res = await fetch("/api/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username, password }),
+            });
+            const data = await res.json();
+
+            if (data.success) {
+              localStorage.setItem("token", data.token);
+              localStorage.setItem("username", username);
+              localStorage.setItem("isAdmin", data.admin ? "true" : "false");
+
+              status.textContent = "✅ 로그인 성공!";
+              status.style.color = "green";
+
+              // 관리자면 slug 수정 페이지로 이동
+              if (data.admin) {
+                window.location.href = "/supa/slug/edit_slug.html";
+              } else {
+                // 일반 유저라면 대시보드 또는 메인으로 이동
+                window.location.href = "/";
+              }
+            } else {
+              status.textContent = data.error || "로그인 실패";
+              status.style.color = "red";
+            }
+          } catch (err) {
+            status.textContent = "서버 오류";
+            status.style.color = "red";
+          }
+        });
+    </script>
+  </body>
+</html>
