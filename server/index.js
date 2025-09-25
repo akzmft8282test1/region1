@@ -188,7 +188,8 @@ app.post("/api/login", async (req, res) => {
       { expiresIn: "6h" },
     );
 
-    res.json({ success: true, token });
+    // ✅ admin 정보를 응답에 포함시킴
+    res.json({ success: true, token, admin: account.admin });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
   }
