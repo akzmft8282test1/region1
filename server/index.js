@@ -7,6 +7,7 @@
  * - CORS 출처 제어 (환경변수 ALLOWED_ORIGINS)
  * - Supabase client는 anon 키만 사용 (.env)
  * - /config.js 제공 → 클라이언트에서 window.__SUPABASE_URL__ 읽을 수 있음
+ * - 한글/공백/특수문자 slug 완벽 지원 (:slug → :slug(*))
  */
 
 require("dotenv").config();
@@ -115,16 +116,16 @@ app.get("/quizmaker", (req, res) => sendFileResponse(res, "quizmaker.html"));
 app.get("/quizmaker/make", (req, res) =>
   sendFileResponse(res, "quizmaker/make.html"),
 );
-app.get("/quizmaker/my/:slug", (req, res) =>
+app.get("/quizmaker/my/:slug(*)", (req, res) =>
   sendFileResponse(res, "quizmaker/my/template.html"),
 );
-app.get("/host/:slug", (req, res) =>
+app.get("/host/:slug(*)", (req, res) =>
   sendFileResponse(res, "host/template.html"),
 );
-app.get("/quiz/:slug/leaderboard", (req, res) =>
+app.get("/quiz/:slug(*)/leaderboard", (req, res) =>
   sendFileResponse(res, "quiz/leaderboard.html"),
 );
-app.get("/quiz/:slug", (req, res) =>
+app.get("/quiz/:slug(*)", (req, res) =>
   sendFileResponse(res, "quiz/template.html"),
 );
 
@@ -213,9 +214,8 @@ app.post("/api/quizzes", async (req, res) => {
   }
 });
 
-app.get("/api/quizzes/:slug", async (req, res) => {
+app.get("/api/quizzes/:slug(*)", async (req, res) => {
   try {
-    // ✅ URL 인코딩 복원
     const slug = decodeURIComponent(req.params.slug);
 
     const { data: quiz, error } = await supabase
@@ -239,9 +239,8 @@ app.get("/api/quizzes/:slug", async (req, res) => {
   }
 });
 
-app.post("/api/quizzes/:slug/questions", async (req, res) => {
+app.post("/api/quizzes/:slug(*)/questions", async (req, res) => {
   try {
-    // ✅ URL 인코딩 복원
     const slug = decodeURIComponent(req.params.slug);
     const { text, image_url, timeout, double_points, answers } = req.body;
 
@@ -316,7 +315,6 @@ app.put("/supa/slug/:id", requireAuth, requireAdmin, async (req, res) => {
     const { slug } = req.body;
     if (!slug) return res.status(400).json({ error: "slug required" });
 
-    // ✅ slug 그대로 업데이트
     const { data, error } = await supabase
       .from("quizzes")
       .update({ slug })
