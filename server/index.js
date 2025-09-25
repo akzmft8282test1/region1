@@ -77,15 +77,6 @@ app.get("/config.js", (req, res) => {
 /* ------------------------------
    Utility
 ------------------------------ */
-function slugify(name) {
-  return name
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/[\s_]+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-");
-}
 function sendFileResponse(res, relPath) {
   return res.sendFile(path.join(__dirname, "..", "public", relPath));
 }
@@ -192,7 +183,6 @@ app.post("/api/login", async (req, res) => {
       { expiresIn: "6h" },
     );
 
-    // ✅ admin 정보를 응답에 포함시킴
     res.json({ success: true, token, admin: account.admin });
   } catch (err) {
     res.status(500).json({ error: err.message || err });
@@ -207,8 +197,8 @@ app.post("/api/quizzes", async (req, res) => {
     const { name, settings } = req.body;
     if (!name) return res.status(400).json({ error: "name required" });
 
-    const baseSlug = slugify(name);
-    const slug = `${baseSlug}-${uuidv4().slice(0, 6)}`;
+    // ✅ slug = name 그대로 사용 (한글, 공백, 특수문자 포함)
+    const slug = name;
 
     const { data, error } = await supabase
       .from("quizzes")
@@ -225,7 +215,9 @@ app.post("/api/quizzes", async (req, res) => {
 
 app.get("/api/quizzes/:slug", async (req, res) => {
   try {
-    const { slug } = req.params;
+    // ✅ URL 인코딩 복원
+    const slug = decodeURIComponent(req.params.slug);
+
     const { data: quiz, error } = await supabase
       .from("quizzes")
       .select("*")
@@ -249,7 +241,8 @@ app.get("/api/quizzes/:slug", async (req, res) => {
 
 app.post("/api/quizzes/:slug/questions", async (req, res) => {
   try {
-    const { slug } = req.params;
+    // ✅ URL 인코딩 복원
+    const slug = decodeURIComponent(req.params.slug);
     const { text, image_url, timeout, double_points, answers } = req.body;
 
     const { data: quiz } = await supabase
@@ -322,6 +315,8 @@ app.put("/supa/slug/:id", requireAuth, requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { slug } = req.body;
     if (!slug) return res.status(400).json({ error: "slug required" });
+
+    // ✅ slug 그대로 업데이트
     const { data, error } = await supabase
       .from("quizzes")
       .update({ slug })
