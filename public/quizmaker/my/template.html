@@ -142,7 +142,17 @@
     </div>
 
     <script>
-      const slug = window.location.pathname.split("/").pop();
+      // ✅ Supabase 클라이언트 초기화 (app.js 에서 설정됨)
+      const supabaseClient = supabase.createClient(
+        window.__SUPABASE_URL__,
+        window.__SUPABASE_KEY__,
+      );
+
+      // ✅ slug 추출 (한글/공백/특수문자 복원)
+      const slug = decodeURIComponent(
+        window.location.pathname.split("/").pop(),
+      );
+
       const quizTitleEl = document.getElementById("quizTitle");
       const addBtn = document.getElementById("addQuestionBtn");
       const questionListEl = document.getElementById("questionList");
@@ -204,7 +214,7 @@
 
       async function loadQuizAndQuestions() {
         try {
-          const { data: quiz, error } = await db
+          const { data: quiz, error } = await supabaseClient
             .from("quizzes")
             .select("*")
             .eq("slug", slug)
@@ -217,7 +227,7 @@
           }
           quizTitleEl.textContent = `퀴즈 관리 — ${quiz.name}`;
 
-          const { data: questions } = await db
+          const { data: questions } = await supabaseClient
             .from("questions")
             .select("*")
             .eq("quiz_id", quiz.id)
@@ -276,7 +286,7 @@
         }
 
         try {
-          const { data: quiz } = await db
+          const { data: quiz } = await supabaseClient
             .from("quizzes")
             .select("id")
             .eq("slug", slug)
@@ -285,12 +295,12 @@
 
           let questionId = editingQuestionId;
           if (!questionId) {
-            const { count } = await db
+            const { count } = await supabaseClient
               .from("questions")
               .select("id", { head: true, count: "exact" })
               .eq("quiz_id", quiz.id);
             const ord = count || 0;
-            const { data: q } = await db
+            const { data: q } = await supabaseClient
               .from("questions")
               .insert([
                 {
@@ -305,11 +315,14 @@
               .single();
             questionId = q.id;
           } else {
-            await db
+            await supabaseClient
               .from("questions")
               .update({ text, timeout, double_points: doublePoints })
               .eq("id", questionId);
-            await db.from("answers").delete().eq("question_id", questionId);
+            await supabaseClient
+              .from("answers")
+              .delete()
+              .eq("question_id", questionId);
           }
 
           const ansInserts = [];
@@ -327,7 +340,8 @@
               is_correct: isCorrect,
             });
           });
-          if (ansInserts.length) await db.from("answers").insert(ansInserts);
+          if (ansInserts.length)
+            await supabaseClient.from("answers").insert(ansInserts);
 
           alert("저장되었습니다 ✅");
           closeModal();
@@ -340,12 +354,12 @@
 
       async function editQuestion(qid) {
         try {
-          const { data: q } = await db
+          const { data: q } = await supabaseClient
             .from("questions")
             .select("*")
             .eq("id", qid)
             .single();
-          const { data: answers } = await db
+          const { data: answers } = await supabaseClient
             .from("answers")
             .select("*")
             .eq("question_id", qid)
@@ -365,8 +379,8 @@
       async function deleteQuestion(qid) {
         if (!confirm("문제를 삭제하시겠습니까?")) return;
         try {
-          await db.from("questions").delete().eq("id", qid);
-          await db.from("answers").delete().eq("question_id", qid);
+          await supabaseClient.from("questions").delete().eq("id", qid);
+          await supabaseClient.from("answers").delete().eq("question_id", qid);
           loadQuizAndQuestions();
         } catch (err) {
           console.error(err);
@@ -376,17 +390,17 @@
 
       async function duplicateQuestion(qid) {
         try {
-          const { data: q } = await db
+          const { data: q } = await supabaseClient
             .from("questions")
             .select("*")
             .eq("id", qid)
             .single();
-          const { data: answers } = await db
+          const { data: answers } = await supabaseClient
             .from("answers")
             .select("*")
             .eq("question_id", qid)
             .order("ord");
-          const { data: newQ } = await db
+          const { data: newQ } = await supabaseClient
             .from("questions")
             .insert([
               {
@@ -405,7 +419,7 @@
               text: a.text,
               is_correct: a.is_correct,
             }));
-            await db.from("answers").insert(clones);
+            await supabaseClient.from("answers").insert(clones);
           }
           loadQuizAndQuestions();
         } catch (err) {
@@ -444,7 +458,10 @@
           const items = [...list.children];
           for (let i = 0; i < items.length; i++) {
             const id = items[i].dataset.id;
-            await db.from("questions").update({ ord: i }).eq("id", id);
+            await supabaseClient
+              .from("questions")
+              .update({ ord: i })
+              .eq("id", id);
           }
           loadQuizAndQuestions();
         });
