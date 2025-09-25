@@ -137,6 +137,10 @@ app.get("/quiz/:slug", (req, res) =>
   sendFileResponse(res, "quiz/template.html"),
 );
 
+// ✅ 로그인 / 회원가입 페이지 라우팅
+app.get("/login", (req, res) => sendFileResponse(res, "login.html"));
+app.get("/register", (req, res) => sendFileResponse(res, "register.html"));
+
 /* ------------------------------
    Auth Routes (회원가입 / 로그인)
 ------------------------------ */

@@ -4,19 +4,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>회원가입</title>
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <h1>회원가입</h1>
-    <input id="username" placeholder="아이디" />
-    <input id="password" type="password" placeholder="비밀번호" />
-    <label>
-      <input type="checkbox" id="admin" />
-      관리자 계정
-    </label>
-    <button id="registerBtn">가입하기</button>
-    <p id="status"></p>
+    <header class="header">
+      <h1>회원가입</h1>
+    </header>
 
-    <p><a href="/login.html">👉 로그인 하러가기</a></p>
+    <main style="padding: 1.25rem; flex: 1">
+      <section class="card">
+        <label for="username">아이디</label>
+        <input id="username" class="input-text" placeholder="아이디 입력" />
+
+        <label for="password">비밀번호</label>
+        <input
+          id="password"
+          type="password"
+          class="input-text"
+          placeholder="비밀번호 입력"
+        />
+
+        <button id="registerBtn" class="btn-primary">가입하기</button>
+        <p id="status"></p>
+        <p><a href="/login">👉 로그인 하러가기</a></p>
+      </section>
+    </main>
+
+    <footer class="footer">© 2025 QuizMaker</footer>
 
     <script>
       document
@@ -24,7 +38,6 @@
         .addEventListener("click", async () => {
           const username = document.getElementById("username").value.trim();
           const password = document.getElementById("password").value.trim();
-          const admin = document.getElementById("admin").checked;
           const status = document.getElementById("status");
 
           if (!username || !password) {
@@ -37,7 +50,7 @@
             const res = await fetch("/api/register", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ username, password, admin }),
+              body: JSON.stringify({ username, password }),
             });
             const data = await res.json();
 

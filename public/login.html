@@ -4,15 +4,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>로그인</title>
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <h1>로그인</h1>
-    <input id="username" placeholder="아이디" />
-    <input id="password" type="password" placeholder="비밀번호" />
-    <button id="loginBtn">로그인</button>
-    <p id="status"></p>
+    <header class="header">
+      <h1>로그인</h1>
+    </header>
 
-    <p><a href="/register.html">👉 회원가입 하러가기</a></p>
+    <main style="padding: 1.25rem; flex: 1">
+      <section class="card">
+        <label for="username">아이디</label>
+        <input id="username" class="input-text" placeholder="아이디 입력" />
+
+        <label for="password">비밀번호</label>
+        <input
+          id="password"
+          type="password"
+          class="input-text"
+          placeholder="비밀번호 입력"
+        />
+
+        <button id="loginBtn" class="btn-primary">로그인</button>
+        <p id="status"></p>
+        <p><a href="/register">👉 회원가입 하러가기</a></p>
+      </section>
+    </main>
+
+    <footer class="footer">© 2025 QuizMaker</footer>
 
     <script>
       document
@@ -38,7 +56,6 @@
               status.textContent = "✅ 로그인 성공!";
               status.style.color = "green";
 
-              // 관리자면 slug 수정 페이지로 이동
               if (data.admin) {
                 window.location.href = "/supa/slug/edit_slug.html";
               } else {
