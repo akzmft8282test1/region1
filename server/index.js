@@ -129,6 +129,11 @@ app.get("/quiz/:slug(*)", (req, res) =>
   sendFileResponse(res, "quiz/template.html"),
 );
 
+// ✅ slug 수정 페이지 (html 확장자 없이 접근 가능)
+app.get("/supa/slug/edit_slug", (req, res) =>
+  sendFileResponse(res, "supa/slug/edit_slug.html"),
+);
+
 // ✅ 로그인 / 회원가입 페이지 라우팅
 app.get("/login", (req, res) => sendFileResponse(res, "login.html"));
 app.get("/register", (req, res) => sendFileResponse(res, "register.html"));
