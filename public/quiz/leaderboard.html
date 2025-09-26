@@ -20,7 +20,7 @@
 
     <script>
       const parts = window.location.pathname.split("/");
-      const slug = parts.length >= 3 ? parts[2] : null;
+      const slug = parts.length >= 3 ? decodeURIComponent(parts[2]) : null;
 
       const rankList = document.getElementById("rankList");
 

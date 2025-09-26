@@ -64,7 +64,9 @@
     <footer class="footer">© 2025 QuizMaker</footer>
 
     <script>
-      const slug = window.location.pathname.split("/").pop();
+      const slug = decodeURIComponent(
+        window.location.pathname.split("/").pop(),
+      );
 
       // DOM
       const nicknameInput = document.getElementById("nicknameInput");
