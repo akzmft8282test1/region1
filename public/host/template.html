@@ -26,8 +26,6 @@
             퀴즈 시작
           </button>
 
-          <!-- nextBtn 제거: 호스트는 문제를 수동으로 넘기지 않습니다. -->
-
           <button
             id="endGameBtn"
             class="btn-primary"
@@ -54,7 +52,6 @@
               <th>닉네임</th>
               <th>점수</th>
               <th>답변</th>
-              <!-- ✅ 답변 여부 표시 -->
             </tr>
           </thead>
           <tbody></tbody>
@@ -68,11 +65,13 @@
     <footer class="footer">© 2025 QuizMaker - Host</footer>
 
     <script>
-      const slug = window.location.pathname.split("/").pop();
+      // ✅ slug를 decodeURIComponent로 처리
+      const slug = decodeURIComponent(
+        window.location.pathname.split("/").pop(),
+      );
       let gameId = null;
 
       const startBtn = document.getElementById("startBtn");
-      // nextBtn 제거: const nextBtn = document.getElementById("nextBtn");
       const endGameBtn = document.getElementById("endGameBtn");
       const statusText = document.getElementById("statusText");
       const playerTableBody = document.querySelector("#playerTable tbody");
@@ -88,7 +87,6 @@
           if (game) {
             gameId = game.id;
             statusText.textContent = game.started ? "진행중" : "대기중";
-            // nextBtn은 제거되었으므로 더 이상 표시 토글하지 않음
             return;
           }
           const { data: quiz } = await db
@@ -162,8 +160,6 @@
         });
 
         renderScoreboard(players);
-
-        // 자동 종료 체크 (모든 참가자가 마지막 문제까지 제출했는지)
         checkAllFinished();
       }
 
@@ -200,6 +196,7 @@
           )
           .subscribe();
       }
+
       function subscribeGame() {
         if (!gameId) return;
         db.channel("games-" + gameId)
@@ -218,7 +215,6 @@
                 : g.ended
                   ? "종료됨"
                   : "대기중";
-              // nextBtn 관련 로직 제거 (호스트가 문제를 직접 넘기지 않음)
               if (g.ended) {
                 window.location.href = `/quiz/${slug}/leaderboard`;
               }
@@ -227,7 +223,6 @@
           .subscribe();
       }
 
-      // startBtn: 호스트가 클릭해야만 참가자들이 시작됨
       startBtn.addEventListener("click", async () => {
         if (!gameId) return;
         await db
@@ -237,15 +232,12 @@
         startBtn.style.display = "none";
       });
 
-      // nextBtn 관련 코드(이전 코드)는 삭제됨
-
       endGameBtn.addEventListener("click", async () => {
         if (!confirm("게임을 종료하시겠습니까?")) return;
         await db.from("games").update({ ended: true }).eq("id", gameId);
         window.location.href = `/quiz/${slug}/leaderboard`;
       });
 
-      // 자동 종료 판정: 모든 참가자가 모든 문제에 대해 답변 수(제출 수)를 채웠는지 확인하면 games.ended=true
       async function checkAllFinished() {
         if (!gameId) return;
         try {
@@ -266,7 +258,6 @@
             .select("id")
             .eq("game_id", gameId);
           if (!players || players.length === 0) return;
-          // 각 플레이어의 제출 수를 조회
           const counts = await Promise.all(
             players.map(async (p) => {
               const { count } = await db
