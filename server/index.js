@@ -7,7 +7,7 @@
  * - CORS 출처 제어 (환경변수 ALLOWED_ORIGINS)
  * - Supabase client는 anon 키만 사용 (.env)
  * - /config.js 제공 → 클라이언트에서 window.__SUPABASE_URL__ 읽을 수 있음
- * - 한글/공백/특수문자 slug 완벽 지원 (:slug → :slug(*))
+ * - 한글/공백/특수문자 slug 완벽 지원 (:slug → :slug(*), trim + NFC normalize)
  */
 
 require("dotenv").config();
@@ -80,6 +80,11 @@ app.get("/config.js", (req, res) => {
 ------------------------------ */
 function sendFileResponse(res, relPath) {
   return res.sendFile(path.join(__dirname, "..", "public", relPath));
+}
+
+// ✅ slug 정규화 함수
+function normalizeSlug(str) {
+  return (str || "").trim().normalize("NFC");
 }
 
 /* ------------------------------
@@ -203,8 +208,8 @@ app.post("/api/quizzes", async (req, res) => {
     const { name, settings } = req.body;
     if (!name) return res.status(400).json({ error: "name required" });
 
-    // ✅ slug = name 그대로 사용 (한글, 공백, 특수문자 포함)
-    const slug = name;
+    // ✅ slug 정규화 적용
+    const slug = normalizeSlug(name);
 
     const { data, error } = await supabase
       .from("quizzes")
@@ -221,7 +226,7 @@ app.post("/api/quizzes", async (req, res) => {
 
 app.get("/api/quizzes/:slug(*)", async (req, res) => {
   try {
-    const slug = decodeURIComponent(req.params.slug);
+    const slug = normalizeSlug(decodeURIComponent(req.params.slug));
 
     const { data: quiz, error } = await supabase
       .from("quizzes")
@@ -246,7 +251,7 @@ app.get("/api/quizzes/:slug(*)", async (req, res) => {
 
 app.post("/api/quizzes/:slug(*)/questions", async (req, res) => {
   try {
-    const slug = decodeURIComponent(req.params.slug);
+    const slug = normalizeSlug(decodeURIComponent(req.params.slug));
     const { text, image_url, timeout, double_points, answers } = req.body;
 
     const { data: quiz } = await supabase
@@ -317,7 +322,7 @@ app.get("/supa/slug/:id", requireAuth, requireAdmin, async (req, res) => {
 app.put("/supa/slug/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { slug } = req.body;
+    const slug = normalizeSlug(req.body.slug);
     if (!slug) return res.status(400).json({ error: "slug required" });
 
     const { data, error } = await supabase
